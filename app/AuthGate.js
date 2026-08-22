@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import './auth.css';
 
 const slides=[
- 'https://images.openai.com/static-rsc-4/oTdoKjMqfXvbR9M6ClmiM4g4TMsek9KZ03c64ALTl1A_4bNF8sUZB29_9JOVDaVPo9aXEf_vs1I6ptW2GS5nWjfwVBHYbBPScGM7fkDhLrBDXXj5zkMfUDgpJhvhmkPti5UGdBSFLAkoB9f7ntb5AJ5_aRpYwEI2du2DP36YejJuRQCVH-lAHFdcBBFe2Fiu?purpose=fullsize',
+ 'https://images.openai.com/static-rsc-4/hWpUFYjPJdFjaEVVg-UeJxw2-EnEEuemyRfab6fK63JiN3gaQw7BZyfabBhFi2xmuQie6nAkOSwZUzmwFHm7cfiSvunO5zEs1llczHQB67k3xh8JR0hokZPBX1vjh9GVTHEoxwKvXTfqp9q50SLbV9xOuOn_5I-utsHUE8FzHEAPwKlw3KV8Buacw_YvsXq8?purpose=fullsize',
  'https://images.openai.com/static-rsc-4/nhCJYc7LaxV54StwFiUJzkyOLZ_uYPe8siyu6chMlLm59yTlxiPWg5gc1FAYOWY3RC1GR1GMbHxQjZIQ1-bNnU59JWlpNtgqnowNzm-hyIGAT4TeFLr-k1qWW1Ca44lAJ_UQ8GAWiABRO9chYQxISTxkltHalVH7rGwNh86MdZkpYk0JCSPG_fBkHwZ7qONJ?purpose=fullsize',
  'https://images.openai.com/static-rsc-4/ZmiCQ87xjgpDBQuBVgsMC5XTNWi9ozCs2nuyuYRcHoMJLWK5vAMuhUVrOxWeJVUOvTWR3kwNKhu9r8o-l5L2YtAfYfB2wL2yZSFe1YlOzi9ryv2zQQXLdJypXlX21aFGp58Wv38FdBuZ-ge4bno8M5zpvhGVWp8WWHHBa1pYo1awG1kPCM19dHnr0XHc70Wh?purpose=fullsize',
  'https://images.openai.com/static-rsc-4/B9CDCLyqqLw6VtiMF4oSoEd5GMD23020voHEn_uX0Rta_weLm-73xCPN43_FYOiJ643WizqmRiUwTVIyqrcypLt--0yNLHhAYSQb7WKR-8J0cIv42cOq1GInKq26RoDhUNIY_2UQXoFJbNAko9ZfBNTMN1DdhgAFG_Pjkm3R4EbJGNyvm1_rlbgYtdxX1fhX?purpose=fullsize',
