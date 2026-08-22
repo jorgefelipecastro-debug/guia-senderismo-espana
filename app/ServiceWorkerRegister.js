@@ -8,30 +8,48 @@ export default function ServiceWorkerRegister() {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
+    let refreshing = false;
+
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((error) => {
-        console.error('No se pudo registrar el service worker:', error);
-      });
+      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+        .then((registration) => registration.update())
+        .catch((error) => {
+          console.error('No se pudo registrar el service worker:', error);
+        });
+
+      const onControllerChange = () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+
+      if ('caches' in window) {
+        caches.keys().then((keys) => Promise.all(
+          keys.filter((key) => key === 'cumbre-v1').map((key) => caches.delete(key))
+        )).catch(() => {});
+      }
+
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (standalone) setInstalled(true);
+
+      const onBeforeInstall = (event) => {
+        event.preventDefault();
+        setInstallEvent(event);
+      };
+      const onInstalled = () => {
+        setInstalled(true);
+        setInstallEvent(null);
+      };
+
+      window.addEventListener('beforeinstallprompt', onBeforeInstall);
+      window.addEventListener('appinstalled', onInstalled);
+      return () => {
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+        window.removeEventListener('appinstalled', onInstalled);
+      };
     }
-
-    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if (standalone) setInstalled(true);
-
-    const onBeforeInstall = (event) => {
-      event.preventDefault();
-      setInstallEvent(event);
-    };
-    const onInstalled = () => {
-      setInstalled(true);
-      setInstallEvent(null);
-    };
-
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
-    window.addEventListener('appinstalled', onInstalled);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-      window.removeEventListener('appinstalled', onInstalled);
-    };
   }, []);
 
   async function install() {
