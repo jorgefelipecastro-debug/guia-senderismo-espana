@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cumbre-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icon-192.jpg', '/icon-512.jpg', '/apple-touch-icon.jpg'];
+const CACHE_NAME = 'cumbre-v2';
+const APP_SHELL = ['/manifest.webmanifest', '/icon-192.jpg', '/icon-512.jpg', '/apple-touch-icon.jpg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -16,13 +16,23 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  const request = event.request;
+  const isNavigation = request.mode === 'navigate';
+
+  if (isNavigation) {
+    event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => caches.match(request)));
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
+    fetch(request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+      .catch(() => caches.match(request))
   );
 });
