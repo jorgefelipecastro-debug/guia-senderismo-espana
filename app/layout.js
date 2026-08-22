@@ -1,4 +1,5 @@
 import './globals.css';
+import './startup.css';
 import AuthGate from './AuthGate';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 
