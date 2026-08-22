@@ -1,10 +1,12 @@
 import './globals.css';
 import AuthGate from './AuthGate';
+import ServiceWorkerRegister from './ServiceWorkerRegister';
 
 export const metadata = {
   title: 'Cumbre | Senderismo inteligente',
   description: 'Descubre, prepara, vive y disfruta rutas de senderismo por España.',
   manifest: '/manifest.webmanifest',
+  applicationName: 'Cumbre',
   themeColor: '#0b4a38',
   appleWebApp: {
     capable: true,
@@ -28,5 +30,12 @@ export const viewport = {
 };
 
 export default function RootLayout({ children }) {
-  return <html lang="es"><body><AuthGate>{children}</AuthGate></body></html>;
+  return (
+    <html lang="es">
+      <body>
+        <ServiceWorkerRegister />
+        <AuthGate>{children}</AuthGate>
+      </body>
+    </html>
+  );
 }
