@@ -4,14 +4,14 @@ import AuthGate from './AuthGate';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 
 export const metadata = {
-  title: 'Cumbre | Senderismo inteligente',
+  title: 'Encúmbrate | Senderismo inteligente',
   description: 'Descubre, prepara, vive y disfruta rutas de senderismo por España.',
   manifest: '/manifest.webmanifest',
-  applicationName: 'Cumbre',
+  applicationName: 'Encúmbrate',
   themeColor: '#0b4a38',
   appleWebApp: {
     capable: true,
-    title: 'Cumbre',
+    title: 'Encúmbrate',
     statusBarStyle: 'black-translucent'
   },
   icons: {
