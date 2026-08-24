@@ -1,12 +1,12 @@
-# CUMBRE — PROYECTO MAESTRO
+# ENCÚMBRATE — PROYECTO MAESTRO
 
-> Documento vivo para conservar la visión, decisiones de producto y hoja de ruta de Cumbre fuera de cualquier conversación de ChatGPT.
+> Documento vivo para conservar la visión, decisiones de producto y hoja de ruta de Encúmbrate fuera de cualquier conversación de ChatGPT.
 >
 > Estado: reconstrucción inicial basada en el código y documentación actualmente conservados en el repositorio. Las ideas que solo existían en la conversación perdida deben reincorporarse al validar este documento.
 
 ## 1. Visión
 
-Cumbre es una guía de senderismo inteligente para España. No pretende ser simplemente un catálogo de tracks: debe acompañar al senderista antes, durante y después de una ruta y ayudarle a escoger aventuras coherentes con su capacidad real.
+Encúmbrate es una guía de senderismo inteligente para España. No pretende ser simplemente un catálogo de tracks: debe acompañar al senderista antes, durante y después de una ruta y ayudarle a escoger aventuras coherentes con su capacidad real.
 
 Idea central: **Descubre · Prepara · Vive · Disfruta**, con la seguridad como principio transversal.
 
@@ -15,24 +15,24 @@ La aplicación aprende del usuario y adapta sus recomendaciones a su experiencia
 ## 2. Principios de producto
 
 1. **Personalización real.** La ruta adecuada depende de la persona, no solo de su popularidad.
-2. **No autodeclarar el nivel.** Cumbre estima un punto de partida mediante preguntas sobre experiencia, orientación, primeros auxilios, distancias y terreno.
+2. **Separar orientación, progreso y acreditación.** El cuestionario propone una orientación inicial. El nivel real se gana con rutas y logros; la experiencia previa solo puede incorporarse mediante una solicitud acreditada y revisada.
 3. **Progresión responsable.** Las rutas completadas y verificadas deben mejorar el perfil progresivamente.
 4. **Seguridad antes que gamificación.** Nunca empujar al usuario hacia una ruta para la que todavía no está preparado.
 5. **Utilidad en montaña.** GPS, mapas offline, orientación, vuelta sobre los pasos, información del terreno y SOS deben convertirse en funciones reales.
-6. **Información honesta.** Cumbre reduce incertidumbre; no garantiza seguridad ni sustituye criterio, preparación, servicios de emergencia o información oficial.
+6. **Información honesta.** Encúmbrate reduce incertidumbre; no garantiza seguridad ni sustituye criterio, preparación, servicios de emergencia o información oficial.
 7. **Comunidad útil.** Priorizar estado del sendero, equipamiento, agua, meteorología, incidencias, fotografías y consejos recientes frente a métricas sociales vacías.
 8. **La experiencia importa.** La aplicación debe ayudar a vivir y recordar la montaña, no solo a registrar kilómetros.
 
 ## 3. Recorrido ideal del usuario
 
-### 3.1 Cumbre te conoce
+### 3.1 Encúmbrate te conoce
 - Crear cuenta / iniciar sesión.
 - Perfil inicial mediante cuestionario.
 - Variables ya planteadas: experiencia, distancia habitual, orientación, primeros auxilios y terreno técnico.
 - Futuro: incorporar actividad real y rutas verificadas.
 
 ### 3.2 Encuentra tu ruta
-Cumbre debe cruzar el perfil con:
+Encúmbrate debe cruzar el perfil con:
 - distancia;
 - desnivel;
 - dificultad/terreno;
@@ -57,7 +57,7 @@ Antes de salir:
 - estimación de compatibilidad con el perfil;
 - advertencias de riesgo.
 
-### 3.4 Cumbre camina contigo — Modo Aventura
+### 3.4 Encúmbrate camina contigo — Modo Aventura
 Objetivo: lo importante debe estar a una pulsación.
 
 Funciones previstas:
@@ -95,7 +95,7 @@ Niveles actuales del prototipo:
 - Intermedio;
 - Experto.
 
-El usuario no debería escoger manualmente su nivel. El sistema parte de un cuestionario y en el producto real evolucionará con evidencias de actividad.
+El cuestionario no adjudica el nivel real: solo ofrece una orientación inicial para personalizar recomendaciones. El nivel real evoluciona mediante rutas y logros registrados. Un senderista experimentado puede solicitar un nivel acreditado aportando evidencias y aceptando una declaración responsable; la solicitud queda pendiente de revisión y nunca concede el nivel automáticamente.
 
 Dimensiones ya representadas:
 - experiencia;
@@ -138,7 +138,7 @@ La compatibilidad no debe presentarse como una garantía. Debe explicar factores
 ## 6. Seguridad y SOS
 
 ### Principio
-Cumbre puede ayudar a preparar y reaccionar, pero nunca afirmar que elimina el riesgo de la montaña.
+Encúmbrate puede ayudar a preparar y reaccionar, pero nunca afirmar que elimina el riesgo de la montaña.
 
 ### SOS actual/propuesto
 - obtener geolocalización del dispositivo;
@@ -191,7 +191,7 @@ Moderación: insultos, amenazas, spam y contenido abusivo no se publican. Una cr
 
 ## 9. Cuenta y datos del usuario
 
-El prototipo conserva actualmente la cuenta de forma local en el dispositivo. No es todavía una autenticación real de producción.
+La aplicación utiliza Supabase Auth en producción, correo transaccional de Resend y el dominio encumbrate.es. El alta exige confirmación de correo y la recuperación permite establecer una contraseña.
 
 Pendiente:
 - backend;
@@ -208,7 +208,7 @@ Pendiente:
 ## 10. Estado funcional reconstruido
 
 ### Ya representado en el MVP
-- identidad Cumbre;
+- identidad Encúmbrate;
 - onboarding/registro e inicio de sesión de prototipo;
 - explicación «cómo funciona»;
 - cuestionario de perfil;
@@ -241,7 +241,7 @@ Pendiente:
 
 ## 11. Fuentes de datos — pendiente crítico
 
-No poblar Cumbre con datos copiados sin comprobar derechos y condiciones de uso.
+No poblar Encúmbrate con datos copiados sin comprobar derechos y condiciones de uso.
 
 Hay que definir fuentes autorizadas para:
 - catálogo de rutas;
@@ -263,7 +263,7 @@ Cada dato sensible para seguridad debería tener procedencia y fecha de actualiz
 - definir qué significa MVP real.
 
 ### Fase 1 — PWA sólida
-- iconografía definitiva Cumbre;
+- iconografía definitiva Encúmbrate;
 - verificar instalación Android/iOS;
 - revisar service worker y estrategia de caché;
 - probar responsive en teléfonos reales;
@@ -321,7 +321,7 @@ Evaluar Capacitor/React Native u otra arquitectura cuando las necesidades de GPS
 Este bloque existe expresamente para recuperar el feedback perdido. No se debe inventar la respuesta.
 
 - ¿Cuál era la frase exacta de misión/posicionamiento que habíamos elegido?
-- ¿Qué funciones habíamos decidido que diferenciaban Cumbre de Wikiloc/AllTrails/Strava y otras apps?
+- ¿Qué funciones habíamos decidido que diferenciaban Encúmbrate de Wikiloc/AllTrails/Strava y otras apps?
 - ¿Cómo habíamos definido exactamente la progresión del senderista?
 - ¿Qué papel tendría IA/personalización?
 - ¿Cómo debía funcionar «Sorpréndeme»?
@@ -352,4 +352,26 @@ Antes de cambios grandes de producto:
 4. implementar;
 5. comprobar el resultado antes de declararlo terminado.
 
-**Este archivo es la memoria operativa del proyecto Cumbre.**
+**Este archivo es la memoria operativa del proyecto Encúmbrate.**
+
+
+## 14. Decisiones vigentes sobre nivel y responsabilidad (25-08-2026)
+
+### Tres datos distintos
+- **Orientación del test:** `assessment_suggested_level`. Sirve para recomendaciones iniciales y no modifica el nivel real.
+- **Nivel por progreso:** `progression_level`. Evoluciona con rutas y logros registrados por Encúmbrate.
+- **Nivel acreditado:** `accredited_level`. Solo se concede después de revisar una solicitud y sus evidencias.
+
+El nivel efectivo procede del progreso, salvo que una acreditación haya sido aprobada expresamente. Las rutas se catalogan como **Principiante**, **Intermedio** y **Experto**.
+
+### Solicitud de experiencia previa
+El usuario puede solicitar Intermedio o Experto, explicar su experiencia y aportar enlaces a historial de rutas, licencia federativa, certificados o tracks GPS. La aplicación registra usuario, fecha, versión de la declaración y estado de revisión. Una casilla marcada no concede nivel automáticamente.
+
+### Declaración responsable
+El solicitante declara que la información aportada es veraz, que debe valorar recorrido, desnivel, terreno, meteorología, material y riesgos, y que asume las consecuencias de escoger actividades superiores a sus capacidades. Esta declaración no elimina las responsabilidades que legalmente correspondan a Encúmbrate.
+
+### Pendiente de definición antes de automatizar ascensos
+Los umbrales concretos de rutas, puntos, dificultad y verificación necesarios para subir de Principiante a Intermedio o Experto deben aprobarse como reglas de producto. No se inventarán ni se activarán automáticamente hasta acordarlos.
+
+### Preferencia operativa del propietario
+Antes de sustituir texto manualmente en un panel: borrar el contenido anterior, comprobar que el campo está vacío, pegar el contenido nuevo, verificar que no haya duplicados y guardar solo tras confirmación cuando la interfaz lo requiera.
