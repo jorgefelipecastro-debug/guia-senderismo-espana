@@ -20,20 +20,28 @@ const questions = [
 function localResult(answers){
   const vals=questions.map(q=>Number(answers[q.id] ?? 0));
   const score=vals.reduce((a,b)=>a+b,0);
-  const safety=['orientation','compass','coordinates','firstAid','weather','preparation'].map(k=>Number(answers[k] ?? 0));
-  const safetyTotal=safety.reduce((a,b)=>a+b,0);
-  const criticalOk=['orientation','coordinates','weather','preparation'].every(k=>Number(answers[k] ?? 0)>=2);
+  const orientationScore=vals[4]+vals[5]+vals[6];
+  const firstAidScore=vals[7];
   let level='principiante';
-  if(score>=14 && safetyTotal>=8) level='intermedio';
-  if(score>=24 && safetyTotal>=14 && criticalOk && Number(answers.firstAid)>=2 && Number(answers.compass)>=2) level='experto';
-  return {score,level};
+  if(score>=13 && orientationScore>=3 && vals[8]>=1 && vals[9]>=1) level='intermedio';
+  if(score>=23 && orientationScore>=6 && firstAidScore>=2 && vals[8]>=2 && vals[9]>=2) level='experto';
+  const orientationLevel=orientationScore>=7?'avanzado':orientationScore>=4?'competente':'basico';
+  const firstAidLevel=firstAidScore>=3?'formado':firstAidScore>=1?'basico':'ninguno';
+  const preferredDistance=[7,12,20,30][vals[1]];
+  const preferredElevation=[250,500,850,1200][vals[2]];
+  const resultText=level==='principiante'
+    ?'Resultado orientativo: priorizaremos rutas sencillas y bien señalizadas mientras tu experiencia real progresa.'
+    :level==='intermedio'
+      ?'Resultado orientativo: tienes una base útil, pero tu nivel real evolucionará con rutas y logros verificados.'
+      :'Resultado orientativo: declaras experiencia sólida. El nivel Experto deberá ganarse con actividad o acreditarse y revisarse.';
+  return {score,level,orientationLevel,firstAidLevel,preferredDistance,preferredElevation,resultText};
 }
 
 export default function HikerAssessment({user,onComplete}){
   const [step,setStep]=useState(0); const [answers,setAnswers]=useState({}); const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [result,setResult]=useState(null);
   const q=questions[step]; const progress=Math.round(((step+(result?1:0))/questions.length)*100); const calculated=useMemo(()=>localResult(answers),[answers]);
   function choose(value){setAnswers(a=>({...a,[q.id]:value}));}
-  async function next(){if(answers[q.id]===undefined)return; if(step<questions.length-1){setStep(s=>s+1);return;} setBusy(true);setError(''); const storedAnswers=Object.fromEntries(questions.map((question,index)=>[`q${index+1}`,answers[question.id]])); const {data,error}=await supabase.rpc('submit_hiker_assessment_v2',{p_answers:storedAnswers,p_version:1}); setBusy(false); if(error){setError('No hemos podido guardar el test. Inténtalo de nuevo.');return;} setResult(data||calculated);}
+  async function next(){if(answers[q.id]===undefined)return; if(step<questions.length-1){setStep(s=>s+1);return;} setBusy(true);setError(''); const storedAnswers=Object.fromEntries(questions.map((question,index)=>[`q${index+1}`,answers[question.id]])); const completedAt=new Date().toISOString(); const {data,error}=await supabase.from('profiles').update({assessment_suggested_level:calculated.level,orientation_level:calculated.orientationLevel,first_aid_level:calculated.firstAidLevel,preferred_distance_km:calculated.preferredDistance,preferred_elevation_m:calculated.preferredElevation,assessment_completed:true,assessment_skipped:false,assessment_score:calculated.score,assessment_answers:storedAnswers,assessment_completed_at:completedAt,assessment_version:1,assessment_result_text:calculated.resultText,updated_at:completedAt}).eq('id',user.id).select('assessment_suggested_level,assessment_score').single(); setBusy(false); if(error){setError('No hemos podido guardar el test. Inténtalo de nuevo.');return;} setResult({suggested_level:data.assessment_suggested_level,score:data.assessment_score});}
   if(result){const level=(result.suggested_level||result.level||calculated.level);return <div className="assessmentOverlay"><section className="assessmentCard resultCard"><div className="assessmentMark">✓</div><small>ORIENTACIÓN COMPLETADA</small><h1>Nivel orientativo: {level}</h1><p>{level==='principiante'?'Empezaremos con rutas accesibles, bien señalizadas y con más apoyo de preparación y seguridad.':level==='intermedio'?'Tienes una buena base. Podremos proponerte rutas de dificultad media y ayudarte a ganar autonomía.':'Tienes experiencia y una base sólida de autonomía, orientación y seguridad. Podremos proponerte retos más exigentes.'}</p><div className="assessmentResultGrid"><span>Puntuación <b>{result.assessment_score ?? result.score ?? calculated.score}</b></span><span>Tu nivel real evolucionará con tus <b>rutas y logros</b></span></div><button onClick={()=>onComplete?.(level)}>Entrar en Encúmbrate</button></section></div>}
   return <div className="assessmentOverlay"><section className="assessmentCard"><header><div><small>ENCÚMBRATE · TEST DE NIVEL</small><h1>Conozcamos tu experiencia</h1></div><b>{step+1}/{questions.length}</b></header><div className="assessmentProgress"><i style={{width:`${Math.max(8,progress)}%`}}/></div><p className="assessmentHint">No es un examen. Tus respuestas nos ayudan a recomendarte rutas acordes con tu experiencia y autonomía.</p><h2>{q.title}</h2><div className="assessmentOptions">{q.options.map(([label,value])=><button key={label} className={answers[q.id]===value?'selected':''} onClick={()=>choose(value)}><span>{label}</span><i>{answers[q.id]===value?'✓':''}</i></button>)}</div>{error&&<div className="assessmentError">{error}</div>}<footer>{step>0?<button className="secondary" onClick={()=>setStep(s=>s-1)}>Atrás</button>:<span/>}<button disabled={answers[q.id]===undefined||busy} onClick={next}>{busy?'Guardando…':step===questions.length-1?'Ver mi nivel':'Continuar'}</button></footer><div className="assessmentSafety">El nivel es orientativo. La dificultad real depende también de terreno, meteorología, estado físico y condiciones de cada ruta.</div></section></div>;
 }
