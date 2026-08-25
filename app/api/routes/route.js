@@ -30,7 +30,12 @@ async function geocodeSpain(place) {
   const [result] = await response.json();
   const lat = Number(result?.lat), lon = Number(result?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  return { lat, lon, label: result.display_name || query };
+  return {
+    lat, lon,
+    label: result.display_name || query,
+    osmType: result.osm_type || '',
+    osmId: Number(result.osm_id) || null,
+  };
 }
 
 function numberFrom(value) {
@@ -145,11 +150,14 @@ export async function GET(request) {
       lat: Number.isFinite(lat) && lat >= -90 && lat <= 90 ? lat : DEFAULT_POSITION.lat,
       lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : DEFAULT_POSITION.lon,
     };
-    const radius = Math.min(150000, Math.max(10000, Number(params.get('radius')) || 80000));
+    const radius = Math.min(50000, Math.max(10000, Number(params.get('radius')) || 20000));
     const latDelta = radius / 111000;
     const lonDelta = radius / (111000 * Math.max(.2, Math.cos(position.lat * Math.PI / 180)));
     const bbox = [position.lat - latDelta, position.lon - lonDelta, position.lat + latDelta, position.lon + lonDelta].join(',');
-    const query = `[out:json][timeout:20];relation["route"="hiking"]["name"](${bbox});out tags center 250;`;
+    const provinceAreaId = params.get('scope') === 'province' && geocoded?.osmType === 'relation' && geocoded.osmId ? 3600000000 + geocoded.osmId : null;
+    const query = provinceAreaId
+      ? `[out:json][timeout:20];area(${provinceAreaId})->.searchArea;relation["route"="hiking"]["name"](area.searchArea);out tags center 250;`
+      : `[out:json][timeout:20];relation["route"="hiking"]["name"](${bbox});out tags center 250;`;
     const data = await fetchOverpass(query);
     const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean)
       .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
