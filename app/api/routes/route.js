@@ -75,11 +75,15 @@ function classify(kilometres, ascent) {
 }
 
 function commonsImage(tags) {
-  const value = tags.image || tags.wikimedia_commons || tags['wikimedia_commons:image'];
+  const value = tags.image || tags['wikimedia_commons:image'] || (/^File:/i.test(tags.wikimedia_commons || '') ? tags.wikimedia_commons : '');
   if (!value) return FALLBACK_IMAGE;
   if (/^https?:\/\//i.test(value)) return value;
   const file = String(value).replace(/^File:/i, '');
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1200`;
+}
+
+function hasSpecificImage(tags) {
+  return Boolean(tags.image || tags['wikimedia_commons:image'] || /^File:/i.test(tags.wikimedia_commons || ''));
 }
 
 function normalize(element, userPosition) {
@@ -108,7 +112,12 @@ function normalize(element, userPosition) {
     lon,
     nearbyKm: distanceKm(userPosition.lat, userPosition.lon, lat, lon),
     image: commonsImage(tags),
-    imageIsSpecific: Boolean(tags.image || tags.wikimedia_commons || tags['wikimedia_commons:image']),
+    imageIsSpecific: hasSpecificImage(tags),
+    imageAttribution: hasSpecificImage(tags) ? 'Imagen enlazada en la ficha pública de OpenStreetMap' : '',
+    imageSourceUrl: hasSpecificImage(tags) ? (tags.image || tags['wikimedia_commons:image'] || tags.wikimedia_commons) : '',
+    wikipedia: tags.wikipedia || '',
+    wikidata: tags.wikidata || '',
+    commonsCategory: /^Category:/i.test(tags.wikimedia_commons || '') ? tags.wikimedia_commons : '',
     sourceName: tags.operator || 'OpenStreetMap',
     sourceUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
     officialUrl: tags.website || tags.url || '',
