@@ -94,6 +94,12 @@ export default function ExperienceAccreditation({ user, onClose }) {
   const currentLevel = profile?.level_source === 'accreditation' && profile?.accredited_level
     ? profile.accredited_level
     : profile?.progression_level || 'principiante';
+  const badgeByLevel = {
+    principiante:'/badges/principiante-lagartija.webp',
+    intermedio:'/badges/intermedio-camaleon.webp',
+    experto:'/badges/experto-serpiente.webp'
+  };
+  const currentBadge = badgeByLevel[currentLevel] || badgeByLevel.principiante;
 
   return <div className="accreditationOverlay" role="dialog" aria-modal="true" aria-labelledby="accreditation-title">
     <section className="accreditationCard">
@@ -106,6 +112,7 @@ export default function ExperienceAccreditation({ user, onClose }) {
       </header>
 
       {busy && !profile ? <p>Cargando…</p> : <>
+        <div className="profileLevelBadge"><img src={currentBadge} alt={`Insignia ${currentLevel}`}/><strong>{currentLevel.toUpperCase()}</strong></div>
         <div className="levelSummary">
           <div><small>Nivel actual</small><strong>{currentLevel}</strong></div>
           <div><small>Orientación del test</small><strong>{profile?.assessment_suggested_level || 'Sin completar'}</strong></div>
