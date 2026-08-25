@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const OVERPASS_ENDPOINTS = [
+  'https://overpass.private.coffee/api/interpreter',
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
 ];
 const DEFAULT_POSITION = { lat: 38.3452, lon: -0.4815 };
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=1200&q=82';
@@ -117,7 +117,11 @@ async function fetchOverpass(query) {
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          Accept: 'application/json',
+          'User-Agent': 'Encumbrate/1.0 (https://www.encumbrate.es)',
+        },
         body: new URLSearchParams({ data: query }),
         signal: AbortSignal.timeout(18000),
         next: { revalidate: 21600 },
@@ -142,7 +146,10 @@ export async function GET(request) {
       lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : DEFAULT_POSITION.lon,
     };
     const radius = Math.min(150000, Math.max(10000, Number(params.get('radius')) || 80000));
-    const query = `[out:json][timeout:20];relation["route"="hiking"]["name"](around:${radius},${position.lat},${position.lon});out tags center 250;`;
+    const latDelta = radius / 111000;
+    const lonDelta = radius / (111000 * Math.max(.2, Math.cos(position.lat * Math.PI / 180)));
+    const bbox = [position.lat - latDelta, position.lon - lonDelta, position.lat + latDelta, position.lon + lonDelta].join(',');
+    const query = `[out:json][timeout:20];relation["route"="hiking"]["name"](${bbox});out tags center 250;`;
     const data = await fetchOverpass(query);
     const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean)
       .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
