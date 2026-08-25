@@ -1,0 +1,125 @@
+import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+const DEFAULT_POSITION = { lat: 38.3452, lon: -0.4815 };
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=1200&q=82';
+
+function numberFrom(value) {
+  if (value === undefined || value === null) return null;
+  const match = String(value).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const rad = value => value * Math.PI / 180;
+  const dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function parseDistance(tags) {
+  const raw = tags.distance || tags.length || tags['distance:km'];
+  const value = numberFrom(raw);
+  if (value === null) return null;
+  return /\bm\b/i.test(String(raw)) && !/km/i.test(String(raw)) ? value / 1000 : value;
+}
+
+function parseDuration(tags, kilometres, ascent) {
+  const raw = tags.duration || tags.time || tags['walking_time'];
+  if (raw) return String(raw).replace(/^0(?=\d:)/, '');
+  if (!kilometres) return null;
+  const hours = kilometres / 4 + (ascent || 0) / 600;
+  const rounded = Math.max(0.5, Math.round(hours * 4) / 4);
+  const whole = Math.floor(rounded), minutes = Math.round((rounded - whole) * 60);
+  return `${whole ? `${whole} h` : ''}${minutes ? ` ${minutes} min` : ''}`.trim();
+}
+
+function classify(kilometres, ascent) {
+  if ((kilometres !== null && kilometres >= 20) || (ascent !== null && ascent >= 1000)) return 'experto';
+  if ((kilometres === null || kilometres <= 10) && (ascent === null || ascent <= 400)) return 'principiante';
+  return 'intermedio';
+}
+
+function commonsImage(tags) {
+  const value = tags.image || tags.wikimedia_commons || tags['wikimedia_commons:image'];
+  if (!value) return FALLBACK_IMAGE;
+  if (/^https?:\/\//i.test(value)) return value;
+  const file = String(value).replace(/^File:/i, '');
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1200`;
+}
+
+function normalize(element, userPosition) {
+  const tags = element.tags || {};
+  const lat = element.center?.lat ?? element.lat;
+  const lon = element.center?.lon ?? element.lon;
+  if (!tags.name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const kilometres = parseDistance(tags);
+  const ascent = numberFrom(tags.ascent || tags['ascent:total'] || tags['ele:gain'] || tags['incline:up']);
+  const maxAltitude = numberFrom(tags.maxele || tags['ele:max'] || tags.max_altitude || tags.ele);
+  const minAltitude = numberFrom(tags.minele || tags['ele:min'] || tags.min_altitude);
+  const level = classify(kilometres, ascent);
+  return {
+    id: `osm-${element.type}-${element.id}`,
+    name: tags.name,
+    ref: tags.ref || '',
+    level,
+    distanceKm: kilometres,
+    ascentM: ascent,
+    maxAltitudeM: maxAltitude,
+    minAltitudeM: minAltitude,
+    duration: parseDuration(tags, kilometres, ascent),
+    routeType: tags.roundtrip === 'yes' ? 'Circular' : tags.roundtrip === 'no' ? 'Lineal' : 'No publicado',
+    description: tags.description || `Sendero ${tags.ref ? `${tags.ref} ` : ''}publicado en OpenStreetMap. Comprueba siempre el estado y la señalización antes de salir.`,
+    lat,
+    lon,
+    nearbyKm: distanceKm(userPosition.lat, userPosition.lon, lat, lon),
+    image: commonsImage(tags),
+    imageIsSpecific: Boolean(tags.image || tags.wikimedia_commons || tags['wikimedia_commons:image']),
+    sourceName: tags.operator || 'OpenStreetMap',
+    sourceUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
+    officialUrl: tags.website || tags.url || '',
+    network: tags.network || '',
+  };
+}
+
+async function fetchOverpass(query) {
+  let lastError;
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(18000),
+        next: { revalidate: 21600 },
+      });
+      if (!response.ok) throw new Error(`Overpass ${response.status}`);
+      return response.json();
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error('No route source available');
+}
+
+export async function GET(request) {
+  const params = request.nextUrl.searchParams;
+  const lat = Number(params.get('lat')), lon = Number(params.get('lon'));
+  const position = {
+    lat: Number.isFinite(lat) && lat >= -90 && lat <= 90 ? lat : DEFAULT_POSITION.lat,
+    lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : DEFAULT_POSITION.lon,
+  };
+  const radius = Math.min(150000, Math.max(10000, Number(params.get('radius')) || 80000));
+  const query = `[out:json][timeout:20];relation["route"="hiking"]["name"](around:${radius},${position.lat},${position.lon});out tags center 250;`;
+  try {
+    const data = await fetchOverpass(query);
+    const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean)
+      .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
+    return NextResponse.json({ routes, position, attribution: '© OpenStreetMap contributors · Datos FEDME/CNIG cuando la ruta los referencia', updatedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, s-maxage=21600, stale-while-revalidate=86400' } });
+  } catch {
+    return NextResponse.json({ routes: [], position, attribution: 'Fuente de rutas temporalmente no disponible', error: 'No hemos podido consultar ahora el catálogo público de rutas.' }, { status: 503 });
+  }
+}
