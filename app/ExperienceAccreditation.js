@@ -14,7 +14,7 @@ const evidenceOptions = [
   ['otra', 'Otra acreditación']
 ];
 
-export default function ExperienceAccreditation({ user, onClose }) {
+export default function ExperienceAccreditation({ user, onClose, onProfileChange }) {
   const [profile, setProfile] = useState(null);
   const [request, setRequest] = useState(null);
   const [form, setForm] = useState({
@@ -27,13 +27,14 @@ export default function ExperienceAccreditation({ user, onClose }) {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   useEffect(() => {
     let active = true;
     async function load() {
       const [profileResult, requestResult] = await Promise.all([
         supabase.from('profiles')
-          .select('progression_level,accredited_level,level_source,assessment_suggested_level')
+          .select('progression_level,accredited_level,level_source,assessment_suggested_level,avatar_path,avatar_display')
           .eq('id', user.id)
           .maybeSingle(),
         supabase.from('experience_accreditation_requests')
@@ -48,6 +49,10 @@ export default function ExperienceAccreditation({ user, onClose }) {
         setError('No hemos podido cargar tu información de nivel.');
       } else {
         setProfile(profileResult.data);
+        if (profileResult.data?.avatar_display === 'photo' && profileResult.data?.avatar_path) {
+          const { data: signed } = await supabase.storage.from('avatars').createSignedUrl(profileResult.data.avatar_path, 3600);
+          setAvatarUrl(signed?.signedUrl || '');
+        }
         setRequest(requestResult.data);
       }
       setBusy(false);
@@ -101,6 +106,38 @@ export default function ExperienceAccreditation({ user, onClose }) {
   };
   const currentBadge = badgeByLevel[currentLevel] || badgeByLevel.principiante;
 
+  async function useBadge() {
+    setError('');
+    const { error: updateError } = await supabase.from('profiles').update({ avatar_display: 'badge' }).eq('id', user.id);
+    if (updateError) return setError('No hemos podido seleccionar tu insignia.');
+    setProfile(current => ({ ...current, avatar_display: 'badge' }));
+    setNotice('Tu insignia ya aparece junto al saludo.');
+    onProfileChange?.();
+  }
+
+  async function uploadAvatar(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError('');
+    setNotice('');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return setError('La foto debe ser JPG, PNG o WebP.');
+    if (file.size > 5 * 1024 * 1024) return setError('La foto no puede superar 5 MB.');
+    setBusy(true);
+    const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `${user.id}/profile.${extension}`;
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+    if (uploadError) { setBusy(false); return setError('No hemos podido subir la foto. Inténtalo de nuevo.'); }
+    const { error: updateError } = await supabase.from('profiles').update({ avatar_path: path, avatar_display: 'photo' }).eq('id', user.id);
+    if (updateError) { setBusy(false); return setError('La foto se subió, pero no hemos podido seleccionarla.'); }
+    const { data: signed } = await supabase.storage.from('avatars').createSignedUrl(path, 3600);
+    setAvatarUrl(signed?.signedUrl || '');
+    setProfile(current => ({ ...current, avatar_path: path, avatar_display: 'photo' }));
+    setBusy(false);
+    setNotice('Tu foto ya aparece junto al saludo.');
+    onProfileChange?.();
+  }
+
   return <div className="accreditationOverlay" role="dialog" aria-modal="true" aria-labelledby="accreditation-title">
     <section className="accreditationCard">
       <header>
@@ -113,6 +150,18 @@ export default function ExperienceAccreditation({ user, onClose }) {
 
       {busy && !profile ? <p>Cargando…</p> : <>
         <div className="profileLevelBadge"><img src={currentBadge} alt={`Insignia ${currentLevel}`}/><strong>{currentLevel.toUpperCase()}</strong></div>
+        <div className="avatarChooser">
+          <div className="avatarPreview"><img src={profile?.avatar_display === 'photo' && avatarUrl ? avatarUrl : currentBadge} alt="Foto o insignia seleccionada"/></div>
+          <div>
+            <strong>Imagen del saludo</strong>
+            <p>Elige tu foto o conserva la insignia de tu nivel.</p>
+            <div className="avatarActions">
+              <label className="avatarUpload">Elegir de la galería<input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} disabled={busy}/></label>
+              <label className="avatarUpload avatarCamera">Hacer un selfi<input type="file" accept="image/*" capture="user" onChange={uploadAvatar} disabled={busy}/></label>
+              <button type="button" onClick={useBadge} disabled={busy}>Usar insignia</button>
+            </div>
+          </div>
+        </div>
         <div className="levelSummary">
           <div><small>Nivel actual</small><strong>{currentLevel}</strong></div>
           <div><small>Orientación del test</small><strong>{profile?.assessment_suggested_level || 'Sin completar'}</strong></div>
