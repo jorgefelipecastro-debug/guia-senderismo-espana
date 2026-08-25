@@ -10,12 +10,3 @@
 .badgeResultCard>button{background:#f0d38a;color:#153d2e;min-width:240px}
 @keyframes badgeReveal{from{opacity:0;transform:scale(.72) rotate(-3deg)}to{opacity:1;transform:scale(1) rotate(0)}}
 @media(max-width:600px){.badgeResultCard{padding:24px 18px}.badgeResultCard .levelBadge{width:min(68vw,360px)}.badgeResultCard .badgeLevelName{font-size:34px}}
-
-.badgeResultCard{position:relative;isolation:isolate}
-.badgeResultCard:before,.badgeResultCard:after{content:"";position:absolute;left:50%;top:43%;border:1px solid rgba(240,211,138,.3);border-radius:50%;width:min(58vh,520px,86vw);aspect-ratio:1;transform:translate(-50%,-50%);z-index:-1;animation:badgeAura 2.8s ease-out 1}
-.badgeResultCard:after{animation-delay:1.4s}
-@keyframes lizardAlive{0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-5px) rotate(-.8deg)}42%{transform:translateY(-8px) rotate(.8deg)}55%{transform:translateY(-3px) rotate(0)}}
-@keyframes chameleonAlive{0%,100%{transform:translateY(0) scale(1);filter:drop-shadow(0 24px 28px rgba(0,0,0,.38)) saturate(1)}50%{transform:translateY(-8px) scale(1.015);filter:drop-shadow(0 30px 34px rgba(0,0,0,.42)) saturate(1.18)}}
-@keyframes profileBadgeAlive{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-@keyframes badgeAura{0%{opacity:.75;transform:translate(-50%,-50%) scale(.78)}75%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.16)}}
-@media(prefers-reduced-motion:reduce){.badgeResultCard:before,.badgeResultCard:after,.levelBadge-principiante,.levelBadge-intermedio,.profileLevelBadge img{animation:none!important}}
