@@ -131,12 +131,13 @@ async function fetchOverpass(query) {
 
 export async function GET(request) {
   const params = request.nextUrl.searchParams;
+  let position = DEFAULT_POSITION;
   try {
     const place = params.get('place');
     const geocoded = place ? await geocodeSpain(place) : null;
     if (place && !geocoded) return NextResponse.json({ error: 'No hemos encontrado esa localidad en España.' }, { status: 404 });
     const lat = Number(params.get('lat')), lon = Number(params.get('lon'));
-    const position = geocoded || {
+    position = geocoded || {
       lat: Number.isFinite(lat) && lat >= -90 && lat <= 90 ? lat : DEFAULT_POSITION.lat,
       lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : DEFAULT_POSITION.lon,
     };
@@ -146,7 +147,8 @@ export async function GET(request) {
     const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean)
       .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
     return NextResponse.json({ routes, position, searchLabel: geocoded?.label || '', attribution: '© OpenStreetMap contributors · Datos FEDME/CNIG cuando la ruta los referencia', updatedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, s-maxage=21600, stale-while-revalidate=86400' } });
-  } catch {
+  } catch (error) {
+    console.error('Route catalog lookup failed', error);
     return NextResponse.json({ routes: [], position, attribution: 'Fuente de rutas temporalmente no disponible', error: 'No hemos podido consultar ahora el catálogo público de rutas.' }, { status: 503 });
   }
 }
