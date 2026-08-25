@@ -1,4 +1,4 @@
-const CACHE_NAME = 'encumbrate-v3';
+const CACHE_NAME = 'encumbrate-v4';
 const APP_SHELL = ['/manifest.webmanifest', '/icon-192.jpg', '/icon-512.jpg', '/apple-touch-icon.jpg'];
 
 self.addEventListener('install', (event) => {

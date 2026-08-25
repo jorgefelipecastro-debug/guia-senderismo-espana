@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { findCuratedRoute } from '../../../lib/route-curation';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,7 +8,6 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
 ];
 const DEFAULT_POSITION = { lat: 38.3452, lon: -0.4815 };
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=1200&q=82';
 
 async function geocodeSpain(place) {
   const query = String(place || '').trim().slice(0, 80);
@@ -76,7 +76,7 @@ function classify(kilometres, ascent) {
 
 function commonsImage(tags) {
   const value = tags.image || tags['wikimedia_commons:image'] || (/^File:/i.test(tags.wikimedia_commons || '') ? tags.wikimedia_commons : '');
-  if (!value) return FALLBACK_IMAGE;
+  if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
   const file = String(value).replace(/^File:/i, '');
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1200`;
@@ -91,10 +91,14 @@ function normalize(element, userPosition) {
   const lat = element.center?.lat ?? element.lat;
   const lon = element.center?.lon ?? element.lon;
   if (!tags.name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  const kilometres = parseDistance(tags);
-  const ascent = numberFrom(tags.ascent || tags['ascent:total'] || tags['ele:gain'] || tags['incline:up']);
+  const curated = findCuratedRoute(tags.name, tags.ref);
+  const publishedKilometres = parseDistance(tags);
+  const publishedAscent = numberFrom(tags.ascent || tags['ascent:total'] || tags['ele:gain'] || tags['incline:up']);
+  const kilometres = curated?.distanceKm ?? publishedKilometres;
+  const ascent = curated?.ascentM ?? publishedAscent;
   const maxAltitude = numberFrom(tags.maxele || tags['ele:max'] || tags.max_altitude || tags.ele);
   const minAltitude = numberFrom(tags.minele || tags['ele:min'] || tags.min_altitude);
+  const directImage = commonsImage(tags), curatedImage = curated?.image || null;
   const level = classify(kilometres, ascent);
   return {
     id: `osm-${element.type}-${element.id}`,
@@ -105,22 +109,26 @@ function normalize(element, userPosition) {
     ascentM: ascent,
     maxAltitudeM: maxAltitude,
     minAltitudeM: minAltitude,
-    duration: parseDuration(tags, kilometres, ascent),
-    routeType: tags.roundtrip === 'yes' ? 'Circular' : tags.roundtrip === 'no' ? 'Lineal' : 'No publicado',
+    duration: curated?.duration || parseDuration(tags, kilometres, ascent),
+    routeType: curated?.routeType || (tags.roundtrip === 'yes' ? 'Circular' : tags.roundtrip === 'no' ? 'Lineal' : 'No publicado'),
     description: tags.description || `Sendero ${tags.ref ? `${tags.ref} ` : ''}publicado en OpenStreetMap. Comprueba siempre el estado y la señalización antes de salir.`,
     lat,
     lon,
     nearbyKm: distanceKm(userPosition.lat, userPosition.lon, lat, lon),
-    image: commonsImage(tags),
-    imageIsSpecific: hasSpecificImage(tags),
-    imageAttribution: hasSpecificImage(tags) ? 'Imagen enlazada en la ficha pública de OpenStreetMap' : '',
-    imageSourceUrl: hasSpecificImage(tags) ? (tags.image || tags['wikimedia_commons:image'] || tags.wikimedia_commons) : '',
+    image: curatedImage?.src || directImage,
+    imageIsSpecific: Boolean(curatedImage || hasSpecificImage(tags)),
+    imageAttribution: curatedImage?.credit || (hasSpecificImage(tags) ? 'Imagen enlazada en la ficha pública de OpenStreetMap' : ''),
+    imageLicense: curatedImage?.license || '',
+    imageSourceUrl: curatedImage?.sourceUrl || (hasSpecificImage(tags) ? (tags.image || tags['wikimedia_commons:image'] || tags.wikimedia_commons) : ''),
+    imageGallery: curated?.gallery || [],
     wikipedia: tags.wikipedia || '',
     wikidata: tags.wikidata || '',
     commonsCategory: /^Category:/i.test(tags.wikimedia_commons || '') ? tags.wikimedia_commons : '',
     sourceName: tags.operator || 'OpenStreetMap',
     sourceUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
-    officialUrl: tags.website || tags.url || '',
+    officialUrl: curated?.officialUrl || tags.website || tags.url || '',
+    metricsSource: curated?.metricsSource || (publishedKilometres !== null || publishedAscent !== null ? 'Ficha pública de OpenStreetMap' : ''),
+    metricsSourceUrl: curated?.metricsSourceUrl || '',
     network: tags.network || '',
   };
 }

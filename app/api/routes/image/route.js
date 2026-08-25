@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { findCuratedRoute } from '../../../../lib/route-curation';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +77,11 @@ export async function GET(request) {
   const ref = String(params.get('ref') || '').trim().slice(0, 50);
   const wikipedia = String(params.get('wikipedia') || '').trim().slice(0, 180);
   if (!name) return NextResponse.json({ found: false }, { status: 400 });
+  const curated = findCuratedRoute(name, ref);
+  if (curated?.image) {
+    const gallery = [curated.image, ...(curated.gallery || [])];
+    return NextResponse.json({ found: true, ...curated.image, gallery }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
+  }
   let wikipediaPhoto = null, commonsPhotos = [];
   try { wikipediaPhoto = await fromWikipedia(wikipedia); } catch (error) { console.error('Wikipedia route image lookup failed', error); }
   try { commonsPhotos = await fromCommons(name, ref); } catch (error) { console.error('Commons route image lookup failed', error); }
