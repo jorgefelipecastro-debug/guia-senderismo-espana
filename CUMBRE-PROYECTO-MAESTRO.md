@@ -375,3 +375,14 @@ Los umbrales concretos de rutas, puntos, dificultad y verificación necesarios p
 
 ### Preferencia operativa del propietario
 Antes de sustituir texto manualmente en un panel: borrar el contenido anterior, comprobar que el campo está vacío, pegar el contenido nuevo, verificar que no haya duplicados y guardar solo tras confirmación cuando la interfaz lo requiera.
+
+
+## 15. Insignias y cierre del test (25-08-2026)
+
+El cuestionario inicial solo puede producir dos orientaciones:
+- **PRINCIPIANTE — Lagartija**.
+- **INTERMEDIO — Camaleón**.
+
+Al terminar y guardar el test, antes de entrar en la página principal, se muestra una celebración a pantalla completa con la insignia correspondiente y el nombre del nivel debajo en mayúsculas.
+
+La tercera insignia es **EXPERTO — Serpiente**. Nunca puede obtenerse como resultado del test. Solo se muestra cuando el nivel Experto ha sido ganado mediante el sistema de progresión aprobado o concedido tras acreditar y verificar experiencia. Su marco dorado y más ostentoso expresa que es la categoría superior.
