@@ -41,6 +41,60 @@ async function fromWikipedia(reference) {
   return { src, sourceUrl: page.fullurl || `https://${language}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`, credit: `Wikipedia · ${page.title}`, license: 'Licencia libre indicada en la página de origen', exact: true };
 }
 
+async function imageInfoForTitles(titles) {
+  if (!titles.length) return [];
+  const url = new URL(COMMONS_API);
+  url.search = new URLSearchParams({
+    action: 'query', format: 'json', titles: titles.slice(0, 12).join('|'),
+    prop: 'imageinfo|globalusage', iiprop: 'url|mime|extmetadata', iiurlwidth: '1200',
+    iiextmetadatalanguage: 'es', iiextmetadatafilter: 'Artist|Credit|LicenseShortName|ImageDescription', gulimit: '50',
+  });
+  const data = await fetchJson(url);
+  return Object.values(data.query?.pages || {}).map(page => ({ page, info: page.imageinfo?.[0], metadata: page.imageinfo?.[0]?.extmetadata || {} }))
+    .filter(item => item.info?.mime?.startsWith('image/') && item.info?.thumburl);
+}
+
+function photoFromInfo(item) {
+  return {
+    src: item.info.thumburl || item.info.url,
+    sourceUrl: item.info.descriptionurl,
+    credit: cleanText(item.metadata.Artist?.value || item.metadata.Credit?.value || item.page.title),
+    license: cleanText(item.metadata.LicenseShortName?.value || 'Consultar licencia en Wikimedia Commons'),
+    exact: true,
+  };
+}
+
+async function fromWikidata(reference) {
+  if (!/^Q\d+$/i.test(reference)) return [];
+  const url = new URL('https://www.wikidata.org/w/api.php');
+  url.search = new URLSearchParams({ action: 'wbgetentities', format: 'json', ids: reference.toUpperCase(), props: 'claims' });
+  const data = await fetchJson(url);
+  const entity = data.entities?.[reference.toUpperCase()];
+  const imageNames = (entity?.claims?.P18 || []).map(claim => claim.mainsnak?.datavalue?.value).filter(Boolean);
+  const categoryNames = (entity?.claims?.P373 || []).map(claim => claim.mainsnak?.datavalue?.value).filter(Boolean);
+  const direct = (await imageInfoForTitles(imageNames.map(name => `File:${name}`))).map(photoFromInfo);
+  const categories = [];
+  for (const category of categoryNames.slice(0, 2)) categories.push(...await fromCommonsCategory(`Category:${category}`));
+  return [...direct, ...categories];
+}
+
+async function fromCommonsCategory(reference) {
+  const category = String(reference || '').trim();
+  if (!/^Category:/i.test(category)) return [];
+  const url = new URL(COMMONS_API);
+  url.search = new URLSearchParams({
+    action: 'query', format: 'json', generator: 'categorymembers', gcmtitle: category,
+    gcmtype: 'file', gcmlimit: '20', prop: 'imageinfo|globalusage',
+    iiprop: 'url|mime|extmetadata', iiurlwidth: '1200', iiextmetadatalanguage: 'es',
+    iiextmetadatafilter: 'Artist|Credit|LicenseShortName|ImageDescription', gulimit: '50',
+  });
+  const data = await fetchJson(url);
+  return Object.values(data.query?.pages || {}).map(page => ({ page, info: page.imageinfo?.[0], metadata: page.imageinfo?.[0]?.extmetadata || {} }))
+    .filter(item => item.info?.mime?.startsWith('image/') && item.info?.thumburl && !/\b(map|mapa|logo|icon|marker|bandera|flag|señal|sign|diagram)\b/i.test(normalized(item.page.title)))
+    .sort((a, b) => (b.page.globalusage?.length || 0) - (a.page.globalusage?.length || 0))
+    .slice(0, 5).map(photoFromInfo);
+}
+
 async function fromCommons(name, ref) {
   const tokens = routeTokens(name, ref);
   if (!tokens.length) return [];
@@ -76,16 +130,23 @@ export async function GET(request) {
   const name = String(params.get('name') || '').trim().slice(0, 140);
   const ref = String(params.get('ref') || '').trim().slice(0, 50);
   const wikipedia = String(params.get('wikipedia') || '').trim().slice(0, 180);
+  const wikidata = String(params.get('wikidata') || '').trim().slice(0, 30);
+  const category = String(params.get('category') || '').trim().slice(0, 200);
   if (!name) return NextResponse.json({ found: false }, { status: 400 });
   const curated = findCuratedRoute(name, ref);
   if (curated?.image) {
     const gallery = [curated.image, ...(curated.gallery || [])];
     return NextResponse.json({ found: true, ...curated.image, gallery }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
   }
-  let wikipediaPhoto = null, commonsPhotos = [];
-  try { wikipediaPhoto = await fromWikipedia(wikipedia); } catch (error) { console.error('Wikipedia route image lookup failed', error); }
-  try { commonsPhotos = await fromCommons(name, ref); } catch (error) { console.error('Commons route image lookup failed', error); }
-  const gallery = [wikipediaPhoto, ...commonsPhotos].filter(Boolean).filter((photo, index, list) => list.findIndex(item => item.src === photo.src) === index).slice(0, 5);
+  let wikipediaPhoto = null, linkedPhotos = [], commonsPhotos = [];
+  const [wikipediaResult, wikidataResult, categoryResult, commonsResult] = await Promise.allSettled([
+    fromWikipedia(wikipedia), fromWikidata(wikidata), fromCommonsCategory(category), fromCommons(name, ref),
+  ]);
+  if (wikipediaResult.status === 'fulfilled') wikipediaPhoto = wikipediaResult.value; else console.error('Wikipedia route image lookup failed', wikipediaResult.reason);
+  if (wikidataResult.status === 'fulfilled') linkedPhotos.push(...wikidataResult.value); else console.error('Wikidata route image lookup failed', wikidataResult.reason);
+  if (categoryResult.status === 'fulfilled') linkedPhotos.push(...categoryResult.value); else console.error('Commons category route image lookup failed', categoryResult.reason);
+  if (commonsResult.status === 'fulfilled') commonsPhotos = commonsResult.value; else console.error('Commons route image lookup failed', commonsResult.reason);
+  const gallery = [wikipediaPhoto, ...linkedPhotos, ...commonsPhotos].filter(Boolean).filter((photo, index, list) => list.findIndex(item => item.src === photo.src) === index).slice(0, 5);
   const photo = gallery[0];
   return NextResponse.json(photo ? { found: true, ...photo, gallery } : { found: false, gallery: [] }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
 }
