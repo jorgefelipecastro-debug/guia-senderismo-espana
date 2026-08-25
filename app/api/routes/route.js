@@ -96,8 +96,8 @@ function normalize(element, userPosition) {
   const publishedAscent = numberFrom(tags.ascent || tags['ascent:total'] || tags['ele:gain'] || tags['incline:up']);
   const kilometres = curated?.distanceKm ?? publishedKilometres;
   const ascent = curated?.ascentM ?? publishedAscent;
-  const maxAltitude = numberFrom(tags.maxele || tags['ele:max'] || tags.max_altitude || tags.ele);
-  const minAltitude = numberFrom(tags.minele || tags['ele:min'] || tags.min_altitude);
+  const maxAltitude = curated?.maxAltitudeM ?? numberFrom(tags.maxele || tags['ele:max'] || tags.max_altitude || tags.ele);
+  const minAltitude = curated?.minAltitudeM ?? numberFrom(tags.minele || tags['ele:min'] || tags.min_altitude);
   const directImage = commonsImage(tags), curatedImage = curated?.image || null;
   const level = classify(kilometres, ascent);
   return {
