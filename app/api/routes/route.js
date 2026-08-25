@@ -9,6 +9,30 @@ const OVERPASS_ENDPOINTS = [
 const DEFAULT_POSITION = { lat: 38.3452, lon: -0.4815 };
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1464278533981-50106e6176b1?auto=format&fit=crop&w=1200&q=82';
 
+async function geocodeSpain(place) {
+  const query = String(place || '').trim().slice(0, 80);
+  if (!query) return null;
+  const url = new URL('https://nominatim.openstreetmap.org/search');
+  url.searchParams.set('q', query);
+  url.searchParams.set('format', 'jsonv2');
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('countrycodes', 'es');
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      'Accept-Language': 'es',
+      'User-Agent': 'Encumbrate/1.0 (https://www.encumbrate.es)',
+    },
+    signal: AbortSignal.timeout(10000),
+    next: { revalidate: 86400 },
+  });
+  if (!response.ok) throw new Error(`Nominatim ${response.status}`);
+  const [result] = await response.json();
+  const lat = Number(result?.lat), lon = Number(result?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon, label: result.display_name || query };
+}
+
 function numberFrom(value) {
   if (value === undefined || value === null) return null;
   const match = String(value).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
@@ -107,18 +131,21 @@ async function fetchOverpass(query) {
 
 export async function GET(request) {
   const params = request.nextUrl.searchParams;
-  const lat = Number(params.get('lat')), lon = Number(params.get('lon'));
-  const position = {
-    lat: Number.isFinite(lat) && lat >= -90 && lat <= 90 ? lat : DEFAULT_POSITION.lat,
-    lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : DEFAULT_POSITION.lon,
-  };
-  const radius = Math.min(150000, Math.max(10000, Number(params.get('radius')) || 80000));
-  const query = `[out:json][timeout:20];relation["route"="hiking"]["name"](around:${radius},${position.lat},${position.lon});out tags center 250;`;
   try {
+    const place = params.get('place');
+    const geocoded = place ? await geocodeSpain(place) : null;
+    if (place && !geocoded) return NextResponse.json({ error: 'No hemos encontrado esa localidad en España.' }, { status: 404 });
+    const lat = Number(params.get('lat')), lon = Number(params.get('lon'));
+    const position = geocoded || {
+      lat: Number.isFinite(lat) && lat >= -90 && lat <= 90 ? lat : DEFAULT_POSITION.lat,
+      lon: Number.isFinite(lon) && lon >= -180 && lon <= 180 ? lon : DEFAULT_POSITION.lon,
+    };
+    const radius = Math.min(150000, Math.max(10000, Number(params.get('radius')) || 80000));
+    const query = `[out:json][timeout:20];relation["route"="hiking"]["name"](around:${radius},${position.lat},${position.lon});out tags center 250;`;
     const data = await fetchOverpass(query);
     const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean)
       .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
-    return NextResponse.json({ routes, position, attribution: '© OpenStreetMap contributors · Datos FEDME/CNIG cuando la ruta los referencia', updatedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, s-maxage=21600, stale-while-revalidate=86400' } });
+    return NextResponse.json({ routes, position, searchLabel: geocoded?.label || '', attribution: '© OpenStreetMap contributors · Datos FEDME/CNIG cuando la ruta los referencia', updatedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, s-maxage=21600, stale-while-revalidate=86400' } });
   } catch {
     return NextResponse.json({ routes: [], position, attribution: 'Fuente de rutas temporalmente no disponible', error: 'No hemos podido consultar ahora el catálogo público de rutas.' }, { status: 503 });
   }
