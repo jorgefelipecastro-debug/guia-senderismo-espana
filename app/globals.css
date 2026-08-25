@@ -9,3 +9,12 @@
 .avatarSaving strong{font-size:25px}
 .avatarSaving small{font-size:17px;line-height:1.35;color:rgba(255,255,255,.86)}
 @keyframes avatarSavingSpin{to{transform:rotate(360deg)}}
+
+.selfieCamera{position:fixed;inset:0;z-index:130;background:#00170f;color:#fff;overflow:hidden}
+.selfieCamera video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.selfieCameraTop{position:absolute;top:0;left:0;right:0;display:grid;grid-template-columns:52px 1fr 52px;align-items:center;padding:calc(18px + env(safe-area-inset-top)) 18px 18px;background:linear-gradient(#0009,transparent)}
+.selfieCameraTop button{width:46px;height:46px;border:0;border-radius:50%;background:#0008;color:#fff;font-size:34px;line-height:1}
+.selfieCameraTop strong{text-align:center;font-size:22px}
+.selfieCamera>p{position:absolute;left:20px;right:20px;bottom:150px;margin:0;padding:14px;border-radius:12px;background:#8b1d18e8;text-align:center;font-size:16px}
+.selfieShutter{position:absolute;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));transform:translateX(-50%);width:82px;height:82px;border:4px solid #fff;border-radius:50%;background:#ffffff44;padding:7px}
+.selfieShutter i{display:block;width:100%;height:100%;border-radius:50%;background:#fff}
