@@ -38,7 +38,7 @@ export async function POST(request) {
   try {
     const areaId = await resolveRegionArea(region);
     if (!region.osm_area_id) await supabase.from('route_import_regions').update({ osm_area_id: areaId }).eq('code', region.code);
-    const payload = await fetchRegionRoutes(areaId);
+    const payload = await fetchRegionRoutes(areaId, region.code);
     const routes = (payload.elements || []).map(item => normalizeNationalRoute(item, region, startedAt)).filter(Boolean);
     await upsertBatches(supabase, 'hiking_routes', routes, 'source,source_type,external_id');
     await upsertBatches(supabase, 'hiking_route_regions', routes.map(route => ({ route_id: route.id, region_code: region.code, published: true, last_seen_at: startedAt })), 'route_id,region_code');
