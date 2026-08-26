@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,9 +59,13 @@ async function elevations(points) {
   return (data.elevation || []).map(Number).filter(Number.isFinite);
 }
 
-function duration(distance, ascent) {
+function estimatedMinutes(distance, ascent) {
   if (!distance) return null;
-  const minutes = Math.max(15, Math.round((distance / 4 + (ascent || 0) / 600) * 4) * 15);
+  return Math.max(15, Math.round((distance / 4 + (ascent || 0) / 600) * 4) * 15);
+}
+
+function duration(minutes) {
+  if (!minutes) return null;
   const whole = Math.floor(minutes / 60), rest = minutes % 60;
   return `${whole ? `${whole} h` : ''}${rest ? ` ${rest} min` : ''}`.trim();
 }
@@ -80,8 +85,15 @@ export async function GET(request) {
       const sameSegment = samples[index]?.segment === samples[index + 1]?.segment;
       return sum + (sameSegment && height - heights[index] >= 2 ? height - heights[index] : 0);
     }, 0)) : null;
-    const distanceRounded = Math.round(distance * 10) / 10;
-    return NextResponse.json({ found: true, distanceKm: distanceRounded, ascentM, maxAltitudeM, minAltitudeM, duration: duration(distanceRounded, ascentM), source: heights.length ? 'Calculado con el trazado OpenStreetMap y el modelo de elevación Open-Meteo' : 'Calculado con el trazado OpenStreetMap', calculated: true }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
+    const distanceRounded = Math.round(distance * 10) / 10, minutes = estimatedMinutes(distanceRounded, ascentM);
+    try {
+      await getSupabaseAdmin().rpc('merge_hiking_route_enrichment', {
+        p_route_id: id, p_distance_km: distanceRounded, p_ascent_m: ascentM,
+        p_max_altitude_m: maxAltitudeM, p_min_altitude_m: minAltitudeM,
+        p_duration_minutes: minutes,
+      });
+    } catch (persistError) { console.error('Route profile persistence failed', persistError); }
+    return NextResponse.json({ found: true, distanceKm: distanceRounded, ascentM, maxAltitudeM, minAltitudeM, duration: duration(minutes), source: heights.length ? 'Calculado con el trazado OpenStreetMap y el modelo de elevación Open-Meteo' : 'Calculado con el trazado OpenStreetMap', calculated: true }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
   } catch (error) {
     console.error('Route profile lookup failed', error);
     return NextResponse.json({ found: false, error: 'No hemos podido calcular ahora el perfil de esta ruta.' }, { status: 503 });

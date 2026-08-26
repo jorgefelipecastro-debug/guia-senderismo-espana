@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { findCuratedRoute } from '../../../../lib/route-curation';
+import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,16 @@ function normalized(value) {
 function routeTokens(name, ref) {
   const ignored = new Set(['ruta', 'sendero', 'camino', 'etapa', 'tramo', 'circular', 'vuelta', 'del', 'las', 'los', 'por', 'una']);
   return [...new Set(normalized(`${name} ${ref}`).split(' ').filter(word => word.length >= 3 && !ignored.has(word)))];
+}
+
+async function persistPhoto(id, photo) {
+  if (!/^osm-relation-\d+$/.test(id || '') || !photo?.src) return;
+  try {
+    await getSupabaseAdmin().rpc('merge_hiking_route_enrichment', {
+      p_route_id: id, p_image_url: photo.src, p_image_source_url: photo.sourceUrl || null,
+      p_image_credit: photo.credit || null, p_image_license: photo.license || null,
+    });
+  } catch (error) { console.error('Route image persistence failed', error); }
 }
 
 async function fetchJson(url, timeout = 10000) {
@@ -127,6 +138,7 @@ async function fromCommons(name, ref) {
 
 export async function GET(request) {
   const params = request.nextUrl.searchParams;
+  const id = String(params.get('id') || '').trim().slice(0, 80);
   const name = String(params.get('name') || '').trim().slice(0, 140);
   const ref = String(params.get('ref') || '').trim().slice(0, 50);
   const wikipedia = String(params.get('wikipedia') || '').trim().slice(0, 180);
@@ -136,6 +148,7 @@ export async function GET(request) {
   const curated = findCuratedRoute(name, ref);
   if (curated?.image) {
     const gallery = [curated.image, ...(curated.gallery || [])];
+    await persistPhoto(id, curated.image);
     return NextResponse.json({ found: true, ...curated.image, gallery }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
   }
   let wikipediaPhoto = null, linkedPhotos = [], commonsPhotos = [];
@@ -148,5 +161,6 @@ export async function GET(request) {
   if (commonsResult.status === 'fulfilled') commonsPhotos = commonsResult.value; else console.error('Commons route image lookup failed', commonsResult.reason);
   const gallery = [wikipediaPhoto, ...linkedPhotos, ...commonsPhotos].filter(Boolean).filter((photo, index, list) => list.findIndex(item => item.src === photo.src) === index).slice(0, 5);
   const photo = gallery[0];
+  await persistPhoto(id, photo);
   return NextResponse.json(photo ? { found: true, ...photo, gallery } : { found: false, gallery: [] }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
 }
