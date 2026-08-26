@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
@@ -26,17 +27,28 @@ async function routeLines(id) {
 }
 
 async function storedRouteLines(id) {
-  const { data, error } = await getSupabaseAdmin().from('hiking_routes')
-    .select('raw_tags,source')
-    .eq('id', id)
-    .eq('published', true)
-    .maybeSingle();
-  if (error) throw error;
-  const points = data?.raw_tags?.trace_points;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  let route;
+  if (url && publishableKey) {
+    const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await publicClient.rpc('get_public_hiking_route_trace', { p_route_id: id });
+    if (error) throw error;
+    route = Array.isArray(data) ? data[0] : data;
+  } else {
+    const { data, error } = await getSupabaseAdmin().from('hiking_routes')
+      .select('raw_tags,source')
+      .eq('id', id)
+      .eq('published', true)
+      .maybeSingle();
+    if (error) throw error;
+    route = data ? { trace_points: data.raw_tags?.trace_points, source: data.source } : null;
+  }
+  const points = route?.trace_points;
   if (!Array.isArray(points) || points.length < 2) return null;
   const line = points.map(point => ({ lat: Number(point?.[0]), lon: Number(point?.[1]) }))
     .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
-  return line.length > 1 ? { lines: [line], source: data.source === 'fedamon' ? 'FAM' : 'OFICIAL' } : null;
+  return line.length > 1 ? { lines: [line], source: route.source === 'fedamon' ? 'FAM' : 'OFICIAL' } : null;
 }
 
 function simplify(line, maximum = 160) {
