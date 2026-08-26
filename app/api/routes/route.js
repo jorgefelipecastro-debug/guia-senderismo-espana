@@ -117,12 +117,16 @@ function normalized(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
+function normalizedRegionQuery(value) {
+  return normalized(value).replace(/[,\s]+espana$/, '').trim();
+}
+
 async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
   const supabase = getSupabaseAdmin();
   if (scope === 'province' && place) {
     const { data: regions, error: regionError } = await supabase.from('route_import_regions').select('code,community,province,status,last_completed_at');
     if (regionError) throw regionError;
-    const needle = normalized(place);
+    const needle = normalizedRegionQuery(place);
     const region = (regions || []).find(item => normalized(item.province) === needle || normalized(item.community) === needle);
     if (!region || region.status !== 'ready') return { ready: false, routes: [] };
     const { data, error, count } = await supabase.from('hiking_route_regions')
@@ -134,11 +138,18 @@ async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
     return { ready: true, routes, total: count || 0, nextCursor: offset + routes.length < (count || 0) ? String(offset + routes.length) : null, region };
   }
   const [south, west, north, east] = bbox.split(',').map(Number);
-  const { data, error } = await supabase.from('hiking_routes').select('*')
-    .eq('published', true).gte('latitude', south).lte('latitude', north)
-    .gte('longitude', west).lte('longitude', east).limit(1000);
-  if (error) throw error;
-  const routes = (data || []).map(row => storedRoute(row, position))
+  const rows = [];
+  const batchSize = 1000;
+  for (let from = 0; ; from += batchSize) {
+    const { data, error } = await supabase.from('hiking_routes').select('*')
+      .eq('published', true).gte('latitude', south).lte('latitude', north)
+      .gte('longitude', west).lte('longitude', east)
+      .order('id').range(from, from + batchSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < batchSize) break;
+  }
+  const routes = rows.map(row => storedRoute(row, position))
     .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
   return { ready: routes.length > 0, routes: routes.slice(offset, offset + limit), total: routes.length, nextCursor: offset + limit < routes.length ? String(offset + limit) : null };
 }
