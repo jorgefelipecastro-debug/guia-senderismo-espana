@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '../../../../../lib/supabase-admin';
 import { fetchRegionRoutes, normalizeNationalRoute, resolveRegionArea } from '../../../../../lib/national-routes';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function equalSecret(provided, expected) {
   const left = Buffer.from(String(provided || ''));
