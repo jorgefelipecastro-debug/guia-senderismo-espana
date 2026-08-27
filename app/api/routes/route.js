@@ -109,8 +109,8 @@ function storedRoute(row, userPosition) {
     wikidata: row.wikidata || '', commonsCategory: row.commons_category || '',
     sourceName: row.operator_name || 'OpenStreetMap', sourceUrl: row.source_url,
     officialUrl: row.official_url || '', metricsSource: row.distance_km !== null || row.ascent_m !== null ? 'Catálogo nacional auditado de Encúmbrate' : '',
-    metricsSourceUrl: row.source_url, network: row.network || '', province: row.province,
-    community: row.community, incompleteFields: row.incomplete_fields || [],
+    metricsSourceUrl: row.source_url, network: row.network || '', municipality: row.municipality || '',
+    province: row.province, community: row.community, incompleteFields: row.incomplete_fields || [],
   };
 }
 
@@ -130,13 +130,26 @@ async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
     const needle = normalizedRegionQuery(place);
     const region = (regions || []).find(item => normalized(item.province) === needle || normalized(item.community) === needle);
     if (!region || region.status !== 'ready') return { ready: false, routes: [] };
-    const { data, error, count } = await supabase.from('hiking_route_regions')
-      .select('route_id,hiking_routes!inner(*)', { count: 'exact' })
-      .eq('region_code', region.code).eq('published', true).eq('hiking_routes.published', true)
-      .order('route_id').range(offset, offset + limit - 1);
-    if (error) throw error;
-    const routes = (data || []).map(item => storedRoute(item.hiking_routes, position));
-    return { ready: true, routes, total: count || 0, nextCursor: offset + routes.length < (count || 0) ? String(offset + routes.length) : null, region };
+    const memberships = [];
+    const batchSize = 1000;
+    for (let from = 0; ; from += batchSize) {
+      const { data, error } = await supabase.from('hiking_route_regions')
+        .select('route_id,hiking_routes!inner(*)')
+        .eq('region_code', region.code).eq('published', true).eq('hiking_routes.published', true)
+        .order('route_id').range(from, from + batchSize - 1);
+      if (error) throw error;
+      memberships.push(...(data || []));
+      if (!data || data.length < batchSize) break;
+    }
+    const routes = memberships.map(item => storedRoute(item.hiking_routes, position))
+      .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
+    return {
+      ready: routes.length > 0,
+      routes: routes.slice(offset, offset + limit),
+      total: routes.length,
+      nextCursor: offset + limit < routes.length ? String(offset + limit) : null,
+      region,
+    };
   }
   const [south, west, north, east] = bbox.split(',').map(Number);
   const rows = [];
