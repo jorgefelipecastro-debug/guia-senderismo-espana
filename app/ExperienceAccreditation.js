@@ -36,6 +36,7 @@ export default function ExperienceAccreditation({ user, onClose }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [mountainProgress, setMountainProgress] = useState({xp:0, expertUnlocked:false, approvedRoutes:0});
+  const [selectedBadge, setSelectedBadge] = useState(null);
 
   useEffect(() => {
     try {
@@ -154,13 +155,14 @@ export default function ExperienceAccreditation({ user, onClose }) {
           <div className="badgeRoadmap">
             {PROGRESSION.map(badge=>{
               const unlocked=PROGRESSION.findIndex(item=>item.id===badge.id)<=PROGRESSION.findIndex(item=>item.id===journey.current.id);
-              return <article className={unlocked?'unlocked':'locked'} key={badge.id} title={unlocked?'Conseguida':`${badge.xp.toLocaleString('es-ES')} XP`}>
-                <img src={badge.asset} alt={badge.label}/><span>{badge.label}</span><small>{unlocked?'✓ Conseguida':`${badge.xp.toLocaleString('es-ES')} XP`}</small>
-              </article>
+              return <button type="button" className={unlocked?'unlocked':'locked'} key={badge.id} title={unlocked?'Conseguida':`${badge.xp.toLocaleString('es-ES')} XP`} onClick={()=>setSelectedBadge(badge)}>
+                <img src={badge.asset} alt={badge.label}/><span>{badge.label}</span><small>{unlocked?'✓ Conseguida':`${badge.xp.toLocaleString('es-ES')} XP`}</small><em>Ver insignia</em>
+              </button>
             })}
           </div>
           <p className="motivationCopy">{journey.next ? 'Cada ruta suma experiencia. Sigue explorando para desbloquear la siguiente insignia y alcanzar Maestro Encúmbrate.' : `Has alcanzado Maestro Encúmbrate. Tus ${journey.points.toLocaleString('es-ES')} XP siguen acumulándose sin límite y quedan guardados como histórico para futuras insignias.`}</p>
         </section>
+        {selectedBadge&&<BadgeDetail badge={selectedBadge} progress={mountainProgress} close={()=>setSelectedBadge(null)}/>}
         <div className="levelSummary">
           <div><small>Nivel actual</small><strong>{currentLevel}</strong></div>
           <div><small>Orientación del test</small><strong>{profile?.assessment_suggested_level || 'Sin completar'}</strong></div>
@@ -244,4 +246,24 @@ export default function ExperienceAccreditation({ user, onClose }) {
       </>}
     </section>
   </div>;
+}
+
+function BadgeDetail({badge,progress,close}){
+  const xp=Number(progress.xp||0),xpMet=xp>=badge.xp;
+  const special=badge.id==='experto'?[{label:'Primeros auxilios acreditados',done:progress.expertUnlocked},{label:'Curso de brújula y orientación acreditado',done:progress.expertUnlocked}]:badge.id==='maestro-encumbrate'?[{label:'Cinco rutas propias aprobadas por Encúmbrate',done:Number(progress.approvedRoutes||0)>=5,detail:`${Math.min(5,Number(progress.approvedRoutes||0))} de 5 aprobadas`}]:[];
+  const obtained=xpMet&&special.every(item=>item.done),missing=Math.max(0,badge.xp-xp),percent=badge.xp?Math.min(100,xp/badge.xp*100):100;
+  return <div className="badgeDetailOverlay" role="dialog" aria-modal="true" aria-labelledby="badge-detail-title">
+    <section className="badgeDetailCard">
+      <button type="button" className="badgeDetailBack" onClick={close} aria-label="Volver">‹</button>
+      <div className="badgeLight" aria-hidden="true"><i/><i/><i/></div>
+      <div className="badgeFloat"><img src={badge.asset} alt={`Insignia ${badge.label}`}/></div>
+      <small className="badgeDetailEyebrow">CAMINO ENCÚMBRATE</small>
+      <h2 id="badge-detail-title">{badge.label}</h2>
+      <span className={obtained?'badgeDetailStatus achieved':'badgeDetailStatus'}>{obtained?'✓ Insignia conseguida':'Insignia por desbloquear'}</span>
+      <div className="badgeDetailProgress"><div><span>Tu progreso</span><b>{xp.toLocaleString('es-ES')} / {badge.xp.toLocaleString('es-ES')} XP</b></div><div className="badgeDetailTrack"><i style={{width:`${percent}%`}}/></div></div>
+      <div className="badgeRequirements"><h3>Qué necesitas conseguir</h3><div className={xpMet?'done':''}><span>{xpMet?'✓':'1'}</span><p><strong>Alcanzar {badge.xp.toLocaleString('es-ES')} XP</strong><small>{xpMet?'Objetivo completado':`Te faltan ${missing.toLocaleString('es-ES')} XP. Cada ruta registrada suma experiencia.`}</small></p></div>{special.map((item,index)=><div className={item.done?'done':''} key={item.label}><span>{item.done?'✓':index+2}</span><p><strong>{item.label}</strong><small>{item.done?'Requisito completado':item.detail||'Presenta una acreditación verificable en tu perfil de montaña.'}</small></p></div>)}</div>
+      <p className="badgeDetailMessage">{obtained?'Esta insignia ya forma parte de tu historia. Sigue acumulando XP para avanzar hacia la siguiente cumbre.':'Sigue explorando con seguridad. Cada recorrido completado te acerca a esta insignia.'}</p>
+      <button type="button" className="badgeDetailClose" onClick={close}>Volver a mis insignias</button>
+    </section>
+  </div>
 }
