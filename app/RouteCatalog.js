@@ -5,6 +5,7 @@ import LiveRouteGuide from './LiveRouteGuide';
 import RecoveryRouteMap from './RecoveryRouteMap';
 import Meetups from './Meetups';
 import RouteSubmission from './RouteSubmission';
+import RouteSubmissionGuide from './RouteSubmissionGuide';
 
 const FALLBACK_POSITION={lat:38.3452,lon:-0.4815};
 const ROUTE_DATA_VERSION='2026-08-26-national-catalog-v1';
@@ -48,6 +49,7 @@ export default function RouteCatalog(){
  const nearest=routes.slice(0,3);
  return <>
   <RouteSubmission/>
+  <RouteSubmissionGuide/>
   <button className="cSearch routeSearchTrigger" onClick={()=>setCatalogOpen(true)} aria-label="Buscar entre todas las rutas"><span className="searchIcon">⌕</span><span>Buscar rutas por nombre…</span><b>☷</b></button>
   <button className="proposeRouteButton" onClick={()=>window.dispatchEvent(new CustomEvent('encumbrate:propose-route'))}>＋ Proponer una ruta que no aparece</button>
   <div className="sectionTitle"><div><h2>{catalogLabel?`Rutas cerca de ${catalogLabel.split(',')[0]}`:'Rutas cerca de ti'}</h2><small>{catalogLabel?'Zona elegida en el buscador':usingLocation?'Ordenadas desde tu ubicación':'Mostrando Alicante como ubicación inicial'}</small></div><button onClick={()=>setCatalogOpen(true)}>Ver todas</button></div>
