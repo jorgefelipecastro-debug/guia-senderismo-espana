@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import './experience-accreditation.css';
+import './progression-badges.css';
+import { PROGRESSION, progressionFor } from '../lib/progressionBadges';
 
 const DECLARATION_VERSION = '2026-08-25-v1';
 
@@ -33,8 +35,16 @@ export default function ExperienceAccreditation({ user, onClose }) {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [mountainProgress, setMountainProgress] = useState({xp:0, expertUnlocked:false, approvedRoutes:0});
 
   useEffect(() => {
+    try {
+      setMountainProgress({
+        xp: Number(localStorage.getItem('encumbrate_xp') || 0),
+        expertUnlocked: localStorage.getItem('encumbrate_expert_unlocked') === 'true',
+        approvedRoutes: Number(localStorage.getItem('encumbrate_approved_routes') || 0)
+      });
+    } catch {}
     let active = true;
     async function load() {
       const [profileResult, requestResult] = await Promise.all([
@@ -117,6 +127,7 @@ export default function ExperienceAccreditation({ user, onClose }) {
     experto:'/badges/experto-serpiente.webp'
   };
   const currentBadge = badgeByLevel[currentLevel] || badgeByLevel.principiante;
+  const journey = progressionFor(mountainProgress.xp, mountainProgress);
 
   return <div className="accreditationOverlay" role="dialog" aria-modal="true" aria-labelledby="accreditation-title">
     <section className="accreditationCard">
@@ -130,6 +141,26 @@ export default function ExperienceAccreditation({ user, onClose }) {
 
       {busy && !profile ? <p>Cargando…</p> : <>
         <div className="profileLevelBadge"><img src={currentBadge} alt={`Insignia ${currentLevel}`}/><strong>{currentLevel.toUpperCase()}</strong></div>
+        <section className="mountainProgress" aria-label="Progresión de insignias">
+          <div className="mountainProgressHero">
+            <img src={journey.current.asset} alt={`Insignia ${journey.current.label}`}/>
+            <div><small>TU INSIGNIA ACTUAL</small><h2>{journey.current.label}</h2><strong>{journey.points.toLocaleString('es-ES')} XP acumulados</strong></div>
+          </div>
+          {journey.next && <div className="nextBadgeProgress">
+            <div className="nextBadgeCopy"><span>Siguiente: <b>{journey.next.label}</b></span><span>{journey.xpRemaining > 0 ? `Te faltan ${journey.xpRemaining.toLocaleString('es-ES')} XP` : 'XP completados · revisa los requisitos'}</span></div>
+            <div className="xpTrack"><i style={{width:`${journey.progress}%`}}/></div>
+            {journey.next.requirements?.length > 0 && <ul>{journey.next.requirements.map(item=><li key={item}>{item}</li>)}</ul>}
+          </div>}
+          <div className="badgeRoadmap">
+            {PROGRESSION.map(badge=>{
+              const unlocked=PROGRESSION.findIndex(item=>item.id===badge.id)<=PROGRESSION.findIndex(item=>item.id===journey.current.id);
+              return <article className={unlocked?'unlocked':'locked'} key={badge.id} title={unlocked?'Conseguida':`${badge.xp.toLocaleString('es-ES')} XP`}>
+                <img src={badge.asset} alt={badge.label}/><span>{badge.label}</span><small>{unlocked?'✓ Conseguida':`${badge.xp.toLocaleString('es-ES')} XP`}</small>
+              </article>
+            })}
+          </div>
+          <p className="motivationCopy">{journey.next ? 'Cada ruta suma experiencia. Sigue explorando para desbloquear la siguiente insignia y alcanzar Maestro Encúmbrate.' : `Has alcanzado Maestro Encúmbrate. Tus ${journey.points.toLocaleString('es-ES')} XP siguen acumulándose sin límite y quedan guardados como histórico para futuras insignias.`}</p>
+        </section>
         <div className="levelSummary">
           <div><small>Nivel actual</small><strong>{currentLevel}</strong></div>
           <div><small>Orientación del test</small><strong>{profile?.assessment_suggested_level || 'Sin completar'}</strong></div>
