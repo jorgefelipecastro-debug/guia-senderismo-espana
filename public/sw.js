@@ -1,5 +1,5 @@
-const CACHE_NAME = 'encumbrate-v9';
-const APP_SHELL = ['/manifest.webmanifest', '/icon-192.jpg', '/icon-512.jpg', '/apple-touch-icon.jpg'];
+const CACHE_NAME = 'encumbrate-v10';
+const APP_SHELL = ['/manifest.webmanifest', '/icon-192-v2.jpg', '/icon-512-v2.jpg', '/apple-touch-icon-v2.jpg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

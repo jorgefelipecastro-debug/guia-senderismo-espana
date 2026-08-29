@@ -16,10 +16,10 @@ export const metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon-192.jpg', sizes: '192x192', type: 'image/jpeg' },
-      { url: '/icon-512.jpg', sizes: '512x512', type: 'image/jpeg' }
+      { url: '/icon-192-v2.jpg', sizes: '192x192', type: 'image/jpeg' },
+      { url: '/icon-512-v2.jpg', sizes: '512x512', type: 'image/jpeg' }
     ],
-    apple: [{ url: '/apple-touch-icon.jpg', sizes: '180x180', type: 'image/jpeg' }]
+    apple: [{ url: '/apple-touch-icon-v2.jpg', sizes: '180x180', type: 'image/jpeg' }]
   }
 };
 
