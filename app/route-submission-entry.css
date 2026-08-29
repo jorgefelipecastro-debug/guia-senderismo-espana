@@ -1,0 +1,11 @@
+.proposeRouteButton {
+  width: 100%;
+  margin: 10px 0 18px;
+  padding: 13px;
+  border: 1px solid #b8cfc2;
+  border-radius: 14px;
+  background: #edf5f0;
+  color: #07533d;
+  font-weight: 900;
+  font-size: 14px;
+}
