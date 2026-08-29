@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import LiveRouteGuide from './LiveRouteGuide';
 import RecoveryRouteMap from './RecoveryRouteMap';
+import Meetups from './Meetups';
 
 const FALLBACK_POSITION={lat:38.3452,lon:-0.4815};
 const ROUTE_DATA_VERSION='2026-08-26-national-catalog-v1';
@@ -50,6 +51,8 @@ export default function RouteCatalog(){
   {loading?<div className="routesState"><i/>Buscando rutas públicas cercanas…</div>:error?<div className="routesState routesError">{error}</div>:nearest.length?<div className="nearbyRoutes">{nearest.map(route=><RouteCard key={route.id} route={route} activity={completed[route.id]} onClick={shown=>setSelected(shown)}/>)}</div>:<div className="routesState">No hay rutas públicas catalogadas en este radio.</div>}
   {catalogOpen&&<RouteDirectory routes={filtered} completed={completed} query={query} setQuery={setQuery} placeQuery={placeQuery} setPlaceQuery={setPlaceQuery} searchPlace={searchPlace} loadPlace={loadPlace} loadMore={loadMore} nextCursor={nextCursor} moreLoading={moreLoading} catalogTotal={catalogTotal} placeLoading={placeLoading} placeError={placeError} catalogLabel={catalogLabel} level={level} setLevel={setLevel} close={()=>setCatalogOpen(false)} history={()=>{setCatalogOpen(false);setHistoryOpen(true)}} select={route=>{setCatalogOpen(false);setSelected(route)}}/>}
   {historyOpen&&<RouteHistory activities={Object.values(completed)} close={()=>setHistoryOpen(false)}/>}
+  <Meetups/>
+  {selected&&<button className="routeMeetupFab" onClick={()=>window.dispatchEvent(new CustomEvent('encumbrate:create-meetup',{detail:selected}))}>♧ Crear quedada</button>}
   {selected&&<RouteDetail route={selected} activity={completed[selected.id]} close={()=>setSelected(null)} onSaved={loadCompleted}/>}
  </>
 }
