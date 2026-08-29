@@ -1,4 +1,4 @@
-# Cumbre — Guía de Senderismo España
+# Encúmbrate — Guía de Senderismo España
 
 MVP de una aplicación de senderismo personalizada para España.
 
