@@ -1,5 +1,6 @@
 import './globals.css';
 import './startup.css';
+import 'leaflet/dist/leaflet.css';
 import AuthGate from './AuthGate';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 
