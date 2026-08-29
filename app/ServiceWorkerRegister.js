@@ -68,14 +68,14 @@ export default function ServiceWorkerRegister() {
 
   return (
     <>
-      <button className="pwaInstall" onClick={install} aria-label="Instalar Cumbre en el móvil">
-        ↓ Instalar Cumbre
+      <button className="pwaInstall" onClick={install} aria-label="Instalar Encúmbrate en el móvil">
+        ↓ Instalar Encúmbrate
       </button>
       {showIOS && (
         <div className="pwaHelp" role="dialog" aria-modal="true">
           <div>
             <button className="pwaClose" onClick={() => setShowIOS(false)} aria-label="Cerrar">×</button>
-            <strong>Instalar Cumbre en iPhone</strong>
+            <strong>Instalar Encúmbrate en iPhone</strong>
             <p>En Safari, pulsa Compartir y después “Añadir a pantalla de inicio”.</p>
           </div>
         </div>
