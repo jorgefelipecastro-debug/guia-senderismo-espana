@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import LiveRouteGuide from './LiveRouteGuide';
 import RecoveryRouteMap from './RecoveryRouteMap';
 import Meetups from './Meetups';
+import RouteSubmission from './RouteSubmission';
 
 const FALLBACK_POSITION={lat:38.3452,lon:-0.4815};
 const ROUTE_DATA_VERSION='2026-08-26-national-catalog-v1';
@@ -46,7 +47,9 @@ export default function RouteCatalog(){
  const filtered=useMemo(()=>routes.filter(route=>(level==='todas'||route.level===level)&&(!query.trim()||`${route.name} ${route.ref}`.toLocaleLowerCase('es').includes(query.trim().toLocaleLowerCase('es')))),[routes,query,level]);
  const nearest=routes.slice(0,3);
  return <>
+  <RouteSubmission/>
   <button className="cSearch routeSearchTrigger" onClick={()=>setCatalogOpen(true)} aria-label="Buscar entre todas las rutas"><span className="searchIcon">⌕</span><span>Buscar rutas por nombre…</span><b>☷</b></button>
+  <button className="proposeRouteButton" onClick={()=>window.dispatchEvent(new CustomEvent('encumbrate:propose-route'))}>＋ Proponer una ruta que no aparece</button>
   <div className="sectionTitle"><div><h2>{catalogLabel?`Rutas cerca de ${catalogLabel.split(',')[0]}`:'Rutas cerca de ti'}</h2><small>{catalogLabel?'Zona elegida en el buscador':usingLocation?'Ordenadas desde tu ubicación':'Mostrando Alicante como ubicación inicial'}</small></div><button onClick={()=>setCatalogOpen(true)}>Ver todas</button></div>
   {loading?<div className="routesState"><i/>Buscando rutas públicas cercanas…</div>:error?<div className="routesState routesError">{error}</div>:nearest.length?<div className="nearbyRoutes">{nearest.map(route=><RouteCard key={route.id} route={route} activity={completed[route.id]} onClick={shown=>setSelected(shown)}/>)}</div>:<div className="routesState">No hay rutas públicas catalogadas en este radio.</div>}
   {catalogOpen&&<RouteDirectory routes={filtered} completed={completed} query={query} setQuery={setQuery} placeQuery={placeQuery} setPlaceQuery={setPlaceQuery} searchPlace={searchPlace} loadPlace={loadPlace} loadMore={loadMore} nextCursor={nextCursor} moreLoading={moreLoading} catalogTotal={catalogTotal} placeLoading={placeLoading} placeError={placeError} catalogLabel={catalogLabel} level={level} setLevel={setLevel} close={()=>setCatalogOpen(false)} history={()=>{setCatalogOpen(false);setHistoryOpen(true)}} select={route=>{setCatalogOpen(false);setSelected(route)}}/>}
