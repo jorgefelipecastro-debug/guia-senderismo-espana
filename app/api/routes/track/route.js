@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
 
 export const dynamic='force-dynamic';
-const ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const ENDPOINTS=['https://overpass.private.coffee/api/interpreter','https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
 function haversine(a,b){const rad=value=>value*Math.PI/180,dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon),x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 function collectGeometry(element){const points=[];for(const member of element.members||[]){for(const point of member.geometry||[]){const next={lat:point.lat,lon:point.lon},previous=points.at(-1);if(!previous||previous.lat!==next.lat||previous.lon!==next.lon)points.push(next)}}return points}
 function sample(points,max=240){if(points.length<=max)return points;const step=(points.length-1)/(max-1);return Array.from({length:max},(_,index)=>points[Math.round(index*step)])}
