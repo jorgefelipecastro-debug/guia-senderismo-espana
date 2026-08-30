@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Encúmbrate",
+    "slug": "encumbrate",
+    "scheme": "encumbrate",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "es.encumbrate.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["location"],
+        "NSLocationWhenInUseUsageDescription": "Encúmbrate usa tu ubicación para mostrarte sobre el sendero.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Encúmbrate guarda tu recorrido con la pantalla apagada para ayudarte a seguir y recuperar el sendero."
+      }
+    },
+    "android": {
+      "package": "es.encumbrate.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permite que Encúmbrate registre tu ruta con la pantalla apagada.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "PENDIENTE_DE_CREAR_EN_EXPO"
+      }
+    }
+  }
+}

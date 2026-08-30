@@ -1,0 +1,27 @@
+{
+  "name": "encumbrate-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "expo": "~57.0.9",
+    "expo-location": "~20.0.0",
+    "expo-status-bar": "~57.0.1",
+    "expo-task-manager": "~15.0.0",
+    "react": "19.2.3",
+    "react-native": "0.87.0",
+    "react-native-url-polyfill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}
