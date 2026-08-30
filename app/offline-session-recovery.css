@@ -1,0 +1,6 @@
+.gpsRecoveryCard{display:grid;grid-template-columns:42px 1fr;gap:10px;margin:16px 0;padding:16px;border:1px solid #b99243;border-radius:20px;background:linear-gradient(145deg,#fff9e9,#edf7f1);box-shadow:0 10px 28px rgba(8,77,51,.12)}
+.gpsRecoveryPulse{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:#b27b12;background:#fff1c8;box-shadow:0 0 0 0 rgba(178,123,18,.35);animation:gpsRecoveryPulse 1.8s infinite}
+.gpsRecoveryCard>div{min-width:0}.gpsRecoveryCard small{display:block;color:#9a690d;font-size:11px;font-weight:900;letter-spacing:.08em}.gpsRecoveryCard strong{display:block;margin-top:3px;color:#064c35;font-size:17px}.gpsRecoveryCard p{margin:5px 0 0;color:#527066;font-size:13px;line-height:1.35}
+.gpsRecoveryCard button{grid-column:1/-1;min-height:48px;border:0;border-radius:14px;background:#08633f;color:#fff;font-size:15px;font-weight:900}.gpsRecoveryCard .gpsRecoveryFinish{margin-top:-3px;background:#fff;color:#07543a;border:1px solid #88aa9e}.gpsRecoveryCard .gpsRecoveryLost{margin-top:-3px;background:#bd2e28}.gpsRecoveryCard button:disabled{opacity:.55}.gpsPending{color:#ffe7a3!important;font-weight:800}
+@keyframes gpsRecoveryPulse{70%{box-shadow:0 0 0 10px rgba(178,123,18,0)}100%{box-shadow:0 0 0 0 rgba(178,123,18,0)}}
+@media (prefers-reduced-motion:reduce){.gpsRecoveryPulse{animation:none}}
