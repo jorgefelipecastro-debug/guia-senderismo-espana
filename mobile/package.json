@@ -25,5 +25,8 @@
     "@babel/core": "^7.29.0",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
+  },
+  "resolutions": {
+    "@expo/metro-config": "~57.0.7"
   }
 }
