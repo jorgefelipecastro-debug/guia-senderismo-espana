@@ -1,0 +1,7 @@
+.chatPrivacy{padding:6px 12px;background:#fff6db;color:#765915;font-size:9px;text-align:center}
+.chatMessages article.clickable{cursor:pointer}.chatMessages article.clickable:active{transform:scale(.985)}
+.chatReport{display:block!important;margin:8px 0 0 auto!important;padding:5px 8px!important;border:1px solid #cf8279!important;border-radius:8px!important;background:#fff5f3!important;color:#a6322a!important;font-size:9px!important;font-weight:900!important;text-decoration:none!important}
+.chatUserActions{position:fixed;inset:0;z-index:4800;display:flex;align-items:flex-end;padding:14px;background:#052d25aa;backdrop-filter:blur(5px)}
+.chatUserActions section{box-sizing:border-box;width:min(480px,100%);margin:0 auto;padding:19px;border-radius:22px;background:#fbfcf9;color:#173f34;box-shadow:0 16px 50px #001d1766}
+.chatUserActions small{color:#a97010;font-size:9px;font-weight:950;letter-spacing:1.3px}.chatUserActions h3{margin:3px 0 14px}
+.chatUserActions button{width:100%;margin-top:8px;padding:13px;border:0;border-radius:11px;background:#08704e;color:#fff;font-weight:900}.chatUserActions button.danger{background:#b9322b}.chatUserActions button.cancel{background:#e5ece7;color:#315248}
