@@ -2,6 +2,7 @@
   "expo": {
     "name": "Encúmbrate",
     "slug": "encumbrate",
+    "owner": "encumbrate-apps-team",
     "scheme": "encumbrate",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -38,7 +39,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "PENDIENTE_DE_CREAR_EN_EXPO"
+        "projectId": "b9db7025-6732-4e17-b975-6e7484ae7545"
       }
     }
   }
