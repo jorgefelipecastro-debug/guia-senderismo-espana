@@ -18,7 +18,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-task-manager": "~57.0.7",
     "react": "19.2.3",
-    "react-native": "0.87.0",
+    "react-native": "0.86.3",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
@@ -27,6 +27,7 @@
     "typescript": "~6.0.3"
   },
   "resolutions": {
-    "@expo/metro-config": "~57.0.7"
+    "@expo/metro-config": "~57.0.7",
+    "react-native": "0.86.3"
   }
 }
