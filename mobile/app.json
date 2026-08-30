@@ -4,12 +4,13 @@
     "slug": "encumbrate",
     "owner": "encumbrate-apps-team",
     "scheme": "encumbrate",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "es.encumbrate.app",
+      "buildNumber": "1",
       "infoPlist": {
         "UIBackgroundModes": ["location"],
         "NSLocationWhenInUseUsageDescription": "Encúmbrate usa tu ubicación para mostrarte sobre el sendero.",
@@ -18,6 +19,7 @@
     },
     "android": {
       "package": "es.encumbrate.app",
+      "versionCode": 1,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
