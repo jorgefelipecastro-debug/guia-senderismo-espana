@@ -7,7 +7,7 @@ Base nativa Android/iOS para seguimiento GPS con la pantalla apagada.
 1. Copiar `.env.example` como `.env` y completar las dos variables públicas de Supabase.
 2. Ejecutar `npm install` dentro de `mobile/`.
 3. Crear un development build (`npx eas build --profile development`). El GPS en segundo plano no debe probarse únicamente con Expo Go.
-4. Sustituir `PENDIENTE_DE_CREAR_EN_EXPO` en `app.json` por el identificador asignado por EAS.
+4. Proyecto EAS vinculado: `@encumbrate-apps-team/encumbrate-app`.
 
 ## Flujo implementado
 
