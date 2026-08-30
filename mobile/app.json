@@ -1,15 +1,23 @@
 {
   "expo": {
     "name": "Encúmbrate",
-    "slug": "encumbrate",
+    "slug": "encumbrate-app",
     "owner": "encumbrate-apps-team",
     "scheme": "encumbrate",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "../public/icon-512-v2.jpg",
+    "splash": {
+      "image": "../public/icon-512-v2.jpg",
+      "resizeMode": "contain",
+      "backgroundColor": "#063f2d"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "es.encumbrate.app",
+      "buildNumber": "2",
+      "icon": "../public/icon-512-v2.jpg",
       "infoPlist": {
         "UIBackgroundModes": ["location"],
         "NSLocationWhenInUseUsageDescription": "Encúmbrate usa tu ubicación para mostrarte sobre el sendero.",
@@ -18,6 +26,11 @@
     },
     "android": {
       "package": "es.encumbrate.app",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "../public/icon-512-v2.jpg",
+        "backgroundColor": "#063f2d"
+      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
