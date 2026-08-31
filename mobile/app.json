@@ -25,14 +25,7 @@
       "adaptiveIcon": {
         "foregroundImage": "../public/icon-512-v2.jpg",
         "backgroundColor": "#063f2d"
-      },
-      "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
-      ]
+      }
     },
     "splash": {
       "image": "../public/icon-512-v2.jpg",
