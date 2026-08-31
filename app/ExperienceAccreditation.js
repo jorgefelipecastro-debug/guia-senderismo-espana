@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import './experience-accreditation.css';
 import './progression-badges.css';
+import './verified-progression.css';
 import { PROGRESSION, progressionFor } from '../lib/progressionBadges';
 
 const DECLARATION_VERSION = '2026-08-25-v1';
@@ -39,18 +40,11 @@ export default function ExperienceAccreditation({ user, onClose }) {
   const [selectedBadge, setSelectedBadge] = useState(null);
 
   useEffect(() => {
-    try {
-      setMountainProgress({
-        xp: Number(localStorage.getItem('encumbrate_xp') || 0),
-        expertUnlocked: localStorage.getItem('encumbrate_expert_unlocked') === 'true',
-        approvedRoutes: Number(localStorage.getItem('encumbrate_approved_routes') || 0)
-      });
-    } catch {}
     let active = true;
     async function load() {
       const [profileResult, requestResult] = await Promise.all([
         supabase.from('profiles')
-          .select('progression_level,accredited_level,level_source,assessment_suggested_level')
+          .select('progression_level,progression_badge,progression_xp,completed_routes,total_distance_km,total_elevation_gain_m,approved_route_contributions,accredited_level,level_source,assessment_suggested_level')
           .eq('id', user.id)
           .maybeSingle(),
         supabase.from('experience_accreditation_requests')
@@ -65,6 +59,11 @@ export default function ExperienceAccreditation({ user, onClose }) {
         setError('No hemos podido cargar tu información de nivel.');
       } else {
         setProfile(profileResult.data);
+        setMountainProgress({
+          xp:Number(profileResult.data?.progression_xp||0),
+          expertUnlocked:profileResult.data?.accredited_level==='experto',
+          approvedRoutes:Number(profileResult.data?.approved_route_contributions||0)
+        });
         const loadedLevel = profileResult.data?.level_source === 'accreditation' && profileResult.data?.accredited_level
           ? profileResult.data.accredited_level
           : profileResult.data?.progression_level || 'principiante';
@@ -161,6 +160,7 @@ export default function ExperienceAccreditation({ user, onClose }) {
             })}
           </div>
           <p className="motivationCopy">{journey.next ? 'Cada ruta suma experiencia. Sigue explorando para desbloquear la siguiente insignia y alcanzar Maestro Encúmbrate.' : `Has alcanzado Maestro Encúmbrate. Tus ${journey.points.toLocaleString('es-ES')} XP siguen acumulándose sin límite y quedan guardados como histórico para futuras insignias.`}</p>
+          <div className="verifiedProgressStats"><div><b>{Number(profile?.completed_routes||0).toLocaleString('es-ES')}</b><small>Rutas verificadas</small></div><div><b>{Number(profile?.total_distance_km||0).toLocaleString('es-ES',{maximumFractionDigits:1})} km</b><small>Distancia registrada</small></div><div><b>{Number(profile?.total_elevation_gain_m||0).toLocaleString('es-ES')} m</b><small>Desnivel acumulado</small></div></div>
         </section>
         {selectedBadge&&<BadgeDetail badge={selectedBadge} progress={mountainProgress} close={()=>setSelectedBadge(null)}/>}
         <div className="levelSummary">

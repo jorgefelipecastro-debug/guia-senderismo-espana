@@ -1,0 +1,18 @@
+appId: es.encumbrate.app
+name: Inicio y recuperación de ruta
+---
+- launchApp:
+    clearState: true
+- assertVisible: "ENCÚMBRATE"
+- assertVisible: "Entrar"
+# El flujo autenticado se ejecuta en CI con una cuenta de prueba precargada.
+- runFlow:
+    when:
+      visible: "RUTA EN MARCHA"
+    commands:
+      - tapOn: "Abrir mapa y guía"
+      - assertVisible: "NAVEGACIÓN ACTIVA"
+      - assertVisible: "Estoy perdido"
+      - tapOn: "Estoy perdido"
+      - assertVisible: "VOLVER AL CAMINO"
+      - assertVisible: "Finalizar ruta"

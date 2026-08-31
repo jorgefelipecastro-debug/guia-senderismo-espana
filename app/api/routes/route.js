@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { findCuratedRoute } from '../../../lib/route-curation';
 import { getSupabaseAdmin } from '../../../lib/supabase-admin';
+import { hasCoreMetrics } from '../../../lib/route-quality';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,7 +142,7 @@ async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
       memberships.push(...(data || []));
       if (!data || data.length < batchSize) break;
     }
-    const routes = memberships.map(item => storedRoute(item.hiking_routes, position))
+    const routes = memberships.map(item => storedRoute(item.hiking_routes, position)).filter(hasCoreMetrics)
       .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
     return {
       ready: routes.length > 0,
@@ -163,7 +164,7 @@ async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
     rows.push(...(data || []));
     if (!data || data.length < batchSize) break;
   }
-  const routes = rows.map(row => storedRoute(row, position))
+  const routes = rows.map(row => storedRoute(row, position)).filter(hasCoreMetrics)
     .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
   return { ready: routes.length > 0, routes: routes.slice(offset, offset + limit), total: routes.length, nextCursor: offset + limit < routes.length ? String(offset + limit) : null };
 }
@@ -266,7 +267,7 @@ export async function GET(request) {
       ? `[out:json][timeout:45];area(${provinceAreaId})->.searchArea;relation["route"="hiking"](area.searchArea);out tags center;`
       : `[out:json][timeout:30];relation["route"="hiking"](${bbox});out tags center;`;
     const data = await fetchOverpass(query);
-    const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean)
+    const routes = (data.elements || []).map(item => normalize(item, position)).filter(Boolean).filter(hasCoreMetrics)
       .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
     const page = routes.slice(offset,offset+limit);
     return NextResponse.json({ routes: page, total: routes.length, nextCursor: offset+page.length<routes.length?String(offset+page.length):null, position, searchLabel: geocoded?.label || '', attribution: '© OpenStreetMap contributors · Importación nacional pendiente para esta zona', updatedAt: new Date().toISOString(), catalogSource: 'live-fallback' }, { headers: { 'Cache-Control': 'public, s-maxage=21600, stale-while-revalidate=86400' } });

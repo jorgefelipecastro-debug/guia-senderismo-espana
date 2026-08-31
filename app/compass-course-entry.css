@@ -1,0 +1,15 @@
+.compassCourseButton {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin: 14px 0;
+  padding: 15px;
+  border: 0;
+  border-radius: 12px;
+  background: #e9a92d;
+  color: #173f34;
+  text-align: left;
+}
+.compassCourseButton b { font-size: 15px; }
+.compassCourseButton span { font-size: 11px; }
