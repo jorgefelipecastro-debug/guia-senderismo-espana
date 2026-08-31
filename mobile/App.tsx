@@ -42,10 +42,20 @@ type Route = {
   lon?: number;
 };
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? "https://www.encumbrate.es";
+const routeReady = (route: Route) =>
+  Boolean(
+    route.id &&
+      route.name &&
+      Number.isFinite(route.distanceKm) &&
+      Number(route.distanceKm) > 0 &&
+      route.duration,
+  );
 export default function App() {
   const [auth, setAuth] = useState<Session | null>(null),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
+    [authMode, setAuthMode] = useState<"login" | "register">("login"),
+    [acceptedTerms, setAcceptedTerms] = useState(false),
     [routes, setRoutes] = useState<Route[]>([]),
     [active, setActive] = useState<NativeRouteSession | null>(null),
     [track, setTrack] = useState<OfflineRoute | null>(null),
@@ -53,33 +63,69 @@ export default function App() {
     [lost, setLost] = useState(false),
     [pending, setPending] = useState(0),
     [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [pendingRoute, setPendingRoute] = useState<Route | null>(null);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setAuth(data.session));
     const { data } = supabase.auth.onAuthStateChange((_event, session) =>
       setAuth(session),
     );
-    restore();
     return () => data.subscription.unsubscribe();
   }, []);
   useEffect(() => {
-    if (auth) loadNearbyRoutes();
+    if (auth) {
+      restore(auth.user.id);
+      loadNearbyRoutes();
+    }
   }, [auth]);
-  async function restore() {
+  async function restore(userId = auth?.user.id) {
     const session = await readSession();
+    if (session && userId && session.userId !== userId) {
+      setMessage("Hay una ruta activa de otra cuenta en este dispositivo. Vuelve a esa cuenta para recuperarla.");
+      setActive(null);
+      setTrack(null);
+      return;
+    }
     setActive(session);
     setPending((await readPending()).length);
     if (session) setTrack(await readOfflineRoute(session.routeId));
   }
   async function login() {
+    if (!email.trim() || !password) {
+      setMessage("Introduce tu correo y contraseña.");
+      return;
+    }
+    if (authMode === "register" && password.length < 8) {
+      setMessage("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (authMode === "register" && !acceptedTerms) {
+      setMessage("Debes aceptar los términos, las normas y la política de privacidad.");
+      return;
+    }
     setBusy(true);
     setMessage("");
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
+    const normalizedEmail = email.trim().toLowerCase();
+    const { error } = authMode === "register"
+      ? await supabase.auth.signUp({ email: normalizedEmail, password })
+      : await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+    setBusy(false);
+    if (error) {
+      setMessage(authMode === "register" ? error.message : "Correo o contraseña incorrectos, o el correo no está confirmado.");
+    } else if (authMode === "register") {
+      setMessage("Cuenta creada. Revisa tu correo, confirma la dirección y después inicia sesión.");
+      setAuthMode("login");
+    }
+  }
+  async function recoverPassword() {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return setMessage("Escribe primero tu correo.");
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${WEB_URL}/?recovery=1`,
     });
     setBusy(false);
-    if (error) setMessage("Correo o contraseña incorrectos.");
+    setMessage(error ? "No se ha podido enviar el correo de recuperación." : "Revisa tu correo para crear una contraseña nueva.");
   }
   async function loadNearbyRoutes() {
     try {
@@ -96,12 +142,13 @@ export default function App() {
           `${WEB_URL}/api/routes?lat=${lat}&lon=${lon}&radius=20000&limit=20`,
         ),
         body = await response.json();
-      setRoutes(body.routes ?? []);
+      setRoutes((body.routes ?? []).filter(routeReady));
     } catch {
       setMessage("No hemos podido cargar las rutas cercanas.");
     }
   }
   async function start(route: Route) {
+    setPendingRoute(null);
     setBusy(true);
     setMessage("Descargando el trazado…");
     try {
@@ -123,6 +170,16 @@ export default function App() {
       setBusy(false);
       await restore();
     }
+  }
+  async function logout() {
+    if (active) {
+      setMessage("Finaliza y sincroniza la ruta antes de cerrar sesión.");
+      return;
+    }
+    await supabase.auth.signOut();
+    setRoutes([]);
+    setTrack(null);
+    setGuide(false);
   }
   async function openGoogleAccess(route: Route) {
     if (!Number.isFinite(route.lat) || !Number.isFinite(route.lon)) {
@@ -176,6 +233,10 @@ export default function App() {
           <Text style={styles.title}>
             Tu guía continúa con la pantalla apagada
           </Text>
+          <View style={styles.authTabs}>
+            <Pressable style={authMode === "login" ? styles.authTabActive : styles.authTab} onPress={() => setAuthMode("login")}><Text>Entrar</Text></Pressable>
+            <Pressable style={authMode === "register" ? styles.authTabActive : styles.authTab} onPress={() => setAuthMode("register")}><Text>Crear cuenta</Text></Pressable>
+          </View>
           <TextInput
             style={styles.input}
             value={email}
@@ -192,8 +253,20 @@ export default function App() {
             placeholder="Contraseña"
           />
           <Pressable style={styles.primary} onPress={login} disabled={busy}>
-            <Text>{busy ? "Entrando…" : "Entrar"}</Text>
+            <Text>{busy ? "Procesando…" : authMode === "register" ? "Crear cuenta" : "Entrar"}</Text>
           </Pressable>
+          {authMode === "login" && <Pressable onPress={recoverPassword} disabled={busy}><Text style={styles.link}>¿Has olvidado tu contraseña?</Text></Pressable>}
+          {authMode === "register" && <>
+            <Pressable style={styles.consent} onPress={() => setAcceptedTerms((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: acceptedTerms }}>
+              <Text style={styles.checkbox}>{acceptedTerms ? "☑" : "☐"}</Text>
+              <Text style={styles.legal}>Acepto los términos, las normas de la comunidad y la política de privacidad.</Text>
+            </Pressable>
+            <View style={styles.legalLinks}>
+              <Pressable onPress={() => Linking.openURL(`${WEB_URL}/terminos`)}><Text style={styles.link}>Términos</Text></Pressable>
+              <Pressable onPress={() => Linking.openURL(`${WEB_URL}/normas-comunidad`)}><Text style={styles.link}>Normas</Text></Pressable>
+              <Pressable onPress={() => Linking.openURL(`${WEB_URL}/privacidad`)}><Text style={styles.link}>Privacidad</Text></Pressable>
+            </View>
+          </>}
           {message && <Text style={styles.message}>{message}</Text>}
         </View>
       </SafeAreaView>
@@ -210,6 +283,7 @@ export default function App() {
             setLost(false);
           }}
           onLost={() => setLost(true)}
+          onRecovered={() => setLost(false)}
           onFinish={finish}
         />
       </SafeAreaView>
@@ -220,6 +294,7 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.brand}>ENCÚMBRATE</Text>
         <Text style={styles.title}>Seguimiento GPS nativo</Text>
+        <Pressable onPress={logout}><Text style={styles.logout}>Cerrar sesión</Text></Pressable>
         {active ? (
           <View style={styles.active}>
             <Text style={styles.live}>● RUTA EN MARCHA</Text>
@@ -277,7 +352,7 @@ export default function App() {
                   </Pressable>
                   <Pressable
                     style={styles.start}
-                    onPress={() => start(route)}
+                    onPress={() => setPendingRoute(route)}
                     disabled={busy}
                   >
                     <Text style={styles.white}>Iniciar</Text>
@@ -289,6 +364,12 @@ export default function App() {
         )}
         {busy && <ActivityIndicator color="#d6aa45" size="large" />}
         {message && <Text style={styles.message}>{message}</Text>}
+        {pendingRoute && <View style={styles.disclosure}>
+          <Text style={styles.disclosureTitle}>Ubicación durante la ruta</Text>
+          <Text style={styles.detail}>Encúmbrate descargará este mapa y registrará tu GPS incluso con la pantalla apagada para conservar tu recorrido, sincronizarlo al recuperar cobertura y ayudarte a volver al sendero. No se usa con publicidad. Puedes retirar “Permitir siempre” en Ajustes.</Text>
+          <Pressable style={styles.primary} onPress={() => start(pendingRoute)}><Text>Entendido, continuar</Text></Pressable>
+          <Pressable onPress={() => setPendingRoute(null)}><Text style={styles.link}>Cancelar</Text></Pressable>
+        </View>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -297,6 +378,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#063d2d" },
   page: { padding: 20, paddingBottom: 50, gap: 14 },
   login: { flex: 1, padding: 24, justifyContent: "center", gap: 14 },
+  authTabs: { flexDirection: "row", gap: 8 },
+  authTab: { flex: 1, padding: 12, alignItems: "center", backgroundColor: "#dce8df", borderRadius: 12 },
+  authTabActive: { flex: 1, padding: 12, alignItems: "center", backgroundColor: "#e4b84f", borderRadius: 12 },
   brand: {
     color: "#e5bd58",
     fontSize: 16,
@@ -330,6 +414,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   message: { color: "#fff", textAlign: "center", lineHeight: 21 },
+  link: { color: "#e5bd58", fontWeight: "800", textAlign: "center", padding: 6 },
+  legal: { color: "#dcece5", fontSize: 12, lineHeight: 17 },
+  consent: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  checkbox: { color: "#e5bd58", fontSize: 22, lineHeight: 24 },
+  legalLinks: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  logout: { color: "#fff", textDecorationLine: "underline", alignSelf: "flex-end" },
+  disclosure: { backgroundColor: "#fff", borderRadius: 20, padding: 18, gap: 12 },
+  disclosureTitle: { color: "#083f2e", fontSize: 20, fontWeight: "900" },
   active: {
     backgroundColor: "#f7fbf8",
     borderRadius: 24,
