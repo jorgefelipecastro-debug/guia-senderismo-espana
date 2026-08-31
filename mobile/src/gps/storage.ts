@@ -37,7 +37,10 @@ export async function readPending() {
 
 export async function appendPending(points: PendingPoint[]) {
   const current = await readPending();
-  const merged = [...current, ...points].slice(-5000);
+  const merged = [...current, ...points];
+  if (merged.length > 20000) {
+    throw new Error('Almacenamiento GPS lleno: conecta el dispositivo antes de continuar.');
+  }
   await AsyncStorage.setItem(PENDING_POINTS_KEY, JSON.stringify(merged));
   return merged.length;
 }
