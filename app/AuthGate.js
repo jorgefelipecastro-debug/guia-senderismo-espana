@@ -1,22 +1,729 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import HikerAssessment from './HikerAssessment';
-import './auth.css';
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { supabase } from "../lib/supabase";
+import HikerAssessment from "./HikerAssessment";
+import "./auth.css";
 
-const slides=['https://images.openai.com/static-rsc-4/hWpUFYjPJdFjaEVVg-UeJxw2-EnEEuemyRfab6fK63JiN3gaQw7BZyfabBhFi2xmuQie6nAkOSwZUzmwFHm7cfiSvunO5zEs1llczHQB67k3xh8JR0hokZPBX1vjh9GVTHEoxwKvXTfqp9q50SLbV9xOuOn_5I-utsHUE8FzHEAPwKlw3KV8Buacw_YvsXq8?purpose=fullsize','https://images.openai.com/static-rsc-4/nhCJYc7LaxV54StwFiUJzkyOLZ_uYPe8siyu6chMlLm59yTlxiPWg5gc1FAYOWY3RC1GR1GMbHxQjZIQ1-bNnU59JWlpNtgqnowNzm-hyIGAT4TeFLr-k1qWW1Ca44lAJ_UQ8GAWiABRO9chYQxISTxkltHalVH7rGwNh86MdZkpYk0JCSPG_fBkHwZ7qONJ?purpose=fullsize'];
-const steps=[['Encúmbrate te conoce','Analizamos tu experiencia, orientación, primeros auxilios y actividad previa para recomendarte rutas adecuadas.'],['Encuentra tu ruta','Encúmbrate cruza tu nivel con distancia, desnivel, terreno, duración, meteorología y características de la ruta.'],['Prepárate','Descarga mapas offline, revisa material, condiciones, brújula, seguridad y recomendaciones antes de comenzar.'],['Encúmbrate camina contigo','GPS durante el recorrido, progreso en tiempo real y ayuda para regresar al sendero si te desvías.'],['Vive la experiencia','Fotos, momentos especiales, datos de tu reloj, kilómetros, calorías y estadísticas de la aventura.'],['Comparte y progresa','Completa rutas, conserva tus recuerdos, comparte fotografías y consejos y descubre nuevos retos adaptados a tu evolución.']];
-const Icon=({type})=>{const c={width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'};if(type==='user')return <svg {...c}><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>;if(type==='mail')return <svg {...c}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>;if(type==='lock')return <svg {...c}><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>;if(type==='eye')return <svg {...c}><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg>;return <svg {...c}><path d="M12 3 5 6v5c0 4.8 2.9 8.2 7 10 4.1-1.8 7-5.2 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>};
-export default function AuthGate({children}){const[ready,setReady]=useState(false),[user,setUser]=useState(null),[needsAssessment,setNeedsAssessment]=useState(false),[profileChecked,setProfileChecked]=useState(false),[mode,setMode]=useState('register'),[slide,setSlide]=useState(0),[howOpen,setHowOpen]=useState(false),[visibleSteps,setVisibleSteps]=useState(0),[registerOpen,setRegisterOpen]=useState(false),[form,setForm]=useState({name:'',email:'',password:'',confirmPassword:'',news:false,terms:false}),[showPassword,setShowPassword]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[recovery,setRecovery]=useState(false);const nameRef=useRef(null),panelRef=useRef(null);
-useEffect(()=>{let active=true;const query=new URLSearchParams(window.location.search),hash=new URLSearchParams(window.location.hash.slice(1)),recoveryFromUrl=query.get('recovery')==='1'||hash.get('type')==='recovery';if(recoveryFromUrl){setRecovery(true);setRegisterOpen(true);setMode('login')}supabase.auth.getSession().then(({data})=>{if(active){const sessionUser=data.session?.user||null;if(sessionUser&&!sessionUser.email_confirmed_at){supabase.auth.signOut();setUser(null);setMode('login');setRegisterOpen(true);setNotice('Revisa tu correo y confirma tu dirección antes de iniciar sesión.')}else{setUser(sessionUser)}setReady(true)}}).catch(()=>setReady(true));const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{const authUser=session?.user||null;setProfileChecked(false);if(event==='SIGNED_IN'&&authUser&&!authUser.email_confirmed_at){supabase.auth.signOut();setUser(null);setMode('login');setRegisterOpen(true);setNotice('Tu cuenta requiere verificación. Por favor, confirma tu correo electrónico a través del enlace enviado.');return}if(event==='PASSWORD_RECOVERY'){setRecovery(true);setRegisterOpen(true);setMode('login');return}setUser(authUser)});return()=>{active=false;subscription.unsubscribe()}},[]);
-useEffect(()=>{let cancelled=false;async function checkProfile(){if(!user||!user.email_confirmed_at){setProfileChecked(true);setNeedsAssessment(false);return;}const{data}=await supabase.from('profiles').select('assessment_completed,assessment_skipped').eq('id',user.id).maybeSingle();if(cancelled)return;setNeedsAssessment(!data?.assessment_completed&&!data?.assessment_skipped);setProfileChecked(true)}checkProfile();return()=>{cancelled=true}},[user]);
-useEffect(()=>{if(user)return;const id=setInterval(()=>setSlide(s=>(s+1)%slides.length),15000);return()=>clearInterval(id)},[user]);useEffect(()=>{if(!howOpen){setVisibleSteps(0);return}setVisibleSteps(1);const timers=steps.slice(1).map((_,i)=>setTimeout(()=>setVisibleSteps(i+2),(i+1)*5000));return()=>timers.forEach(clearTimeout)},[howOpen]);
-function openAuth(nextMode){setMode(nextMode);setError('');setNotice('');setRegisterOpen(true);setHowOpen(false);setTimeout(()=>{panelRef.current?.scrollIntoView({behavior:'smooth',block:'start'});if(nextMode==='register')setTimeout(()=>nameRef.current?.focus(),500)},100)}
-function goRegister(){openAuth('register')} function goLogin(){openAuth('login')}
-async function submit(e){e.preventDefault();setError('');setNotice('');if(recovery){if(!user)return setError('Este enlace ha caducado o ya se ha utilizado. Solicita uno nuevo.');if(form.password.length<8)return setError('La nueva contraseña debe tener al menos 8 caracteres.');if(form.password!==form.confirmPassword)return setError('Las contraseñas no coinciden. Revísalas antes de continuar.');setBusy(true);const{error}=await supabase.auth.updateUser({password:form.password});if(error){if(error.code==='same_password'){await supabase.auth.signOut();window.history.replaceState({},'',window.location.pathname);setBusy(false);setUser(null);setRecovery(false);setMode('login');setRegisterOpen(true);setForm({name:'',email:'',password:'',confirmPassword:'',news:false,terms:false});setNotice('Esa ya era tu contraseña actual. No se ha cambiado: puedes iniciar sesión con ella.');return}setBusy(false);return setError('No hemos podido cambiar la contraseña. Solicita un enlace nuevo e inténtalo otra vez.')}await supabase.auth.signOut();window.history.replaceState({},'',window.location.pathname);setBusy(false);setUser(null);setRecovery(false);setMode('login');setRegisterOpen(true);setForm({name:'',email:'',password:'',confirmPassword:'',news:false,terms:false});setNotice('Contraseña actualizada correctamente. Ya puedes iniciar sesión.');return}const email=form.email.trim().toLowerCase();if(!email||!form.password)return setError('Introduce tu correo y contraseña.');if(mode==='register'&&form.password!==form.confirmPassword)return setError('Las contraseñas no coinciden. Revísalas antes de crear la cuenta.');setBusy(true);if(mode==='register'){if(!form.name.trim()){setBusy(false);return setError('Dinos cómo quieres que te llamemos.')}if(form.password.length<8){setBusy(false);return setError('La contraseña debe tener al menos 8 caracteres.')}if(!form.terms){setBusy(false);return setError('Debes aceptar los términos y la política de privacidad.')}const{data,error}=await supabase.auth.signUp({email,password:form.password,options:{data:{name:form.name.trim(),newsletter:form.news},emailRedirectTo:window.location.origin}});setBusy(false);if(error)return setError(error.message);if(!data.session||!data.user?.email_confirmed_at){setNotice('Cuenta creada. Revisa tu correo y confirma tu dirección para entrar en Encúmbrate.');setUser(null)}else{setUser(data.user)}}else{const{data,error}=await supabase.auth.signInWithPassword({email,password:form.password});setBusy(false);if(error)return setError('Correo o contraseña incorrectos, o el correo todavía no ha sido confirmado.');if(data.user&&!data.user.email_confirmed_at){await supabase.auth.signOut();return setError('Debes confirmar tu dirección de correo electrónico antes de poder acceder.')}}}
-async function forgotPassword(){setError('');setNotice('');const email=form.email.trim().toLowerCase();if(!email)return setError('Escribe primero tu correo electrónico.');setBusy(true);const redirectTo=new URL('/?recovery=1',window.location.origin).toString();const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo});setBusy(false);if(error)return setError(error.message);setNotice('Te hemos enviado un enlace para crear una contraseña nueva. Revisa tu correo.')}
-async function logout(){await supabase.auth.signOut();setMode('login');setRegisterOpen(true);setForm({name:'',email:'',password:'',confirmPassword:'',news:false,terms:false})}
-if(!ready)return null;if(!user||recovery||!user.email_confirmed_at)return <main className={`authPage ${registerOpen||recovery?'registerOpen':''}`}><section className="authPanel" ref={panelRef}><div className="authBrand"><span className="brandPeak">▲</span><strong>ENCÚMBRATE</strong><small>DESCUBRE · PREPARA · VIVE · <b>DISFRUTA</b></small></div><h1>{recovery?'Nueva contraseña':'Bienvenido a Encúmbrate'}</h1><p className="authIntro">{recovery?'Elige una contraseña nueva y segura. La contraseña anterior no se puede consultar.':'Tu próxima aventura empieza aquí.'}</p>{!recovery&&<div className="authTabs"><button type="button" className={mode==='register'?'active':''} onClick={()=>{setMode('register');setError('');setNotice('')}}>Crear cuenta</button><button type="button" className={mode==='login'?'active':''} onClick={()=>{setMode('login');setError('');setNotice('')}}>Iniciar sesión</button></div>}<form onSubmit={submit} className="authForm">{mode==='register'&&!recovery&&<div className="field"><Icon type="user"/><input ref={nameRef} autoComplete="name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre completo"/></div>}{!recovery&&<div className="field"><Icon type="mail"/><input type="email" inputMode="email" autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Correo electrónico"/></div>}<div className="field passwordField"><Icon type="lock"/><input type={showPassword?'text':'password'} autoComplete={recovery||mode==='register'?'new-password':'current-password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder={recovery?'Nueva contraseña':'Contraseña'}/><button type="button" className="passwordEye" onClick={()=>setShowPassword(v=>!v)}><Icon type="eye"/></button></div>{(mode==='register'||recovery)&&<div className={`field passwordField ${form.confirmPassword&&form.password!==form.confirmPassword?'fieldMismatch':''}`}><Icon type="lock"/><input type={showPassword?'text':'password'} autoComplete="new-password" value={form.confirmPassword} onChange={e=>setForm({...form,confirmPassword:e.target.value})} placeholder={recovery?'Repite la nueva contraseña':'Confirmar contraseña'}/><button type="button" className="passwordEye" onClick={()=>setShowPassword(v=>!v)}><Icon type="eye"/></button></div>}{(mode==='register'||recovery)&&form.confirmPassword&&form.password!==form.confirmPassword&&<div className="passwordMismatch">Las contraseñas deben ser iguales.</div>}{mode==='register'&&!recovery&&<><label className="authCheck"><input type="checkbox" checked={form.terms} onChange={e=>setForm({...form,terms:e.target.checked})}/><span>Acepto los <b>Términos y Condiciones</b><br/>y la <b>Política de Privacidad</b></span></label><label className="authCheck"><input type="checkbox" checked={form.news} onChange={e=>setForm({...form,news:e.target.checked})}/><span>Quiero recibir novedades, rutas destacadas<br/>y consejos en mi correo electrónico.</span></label></>}{error&&<div className="authError">{error}</div>}{notice&&<div className="authError" style={{background:'#eef7e8',color:'#174d38'}}>{notice}</div>}<button disabled={busy||((mode==='register'||recovery)&&(!form.confirmPassword||form.password!==form.confirmPassword))} className="authPrimary">{busy?'Procesando…':recovery?'Guardar nueva contraseña':mode==='register'?'Crear cuenta':'Entrar en Encúmbrate'}</button>{mode==='login'&&!recovery&&<button type="button" onClick={forgotPassword} disabled={busy} style={{border:0,background:'transparent',color:'#174d38',textDecoration:'underline'}}>¿Has olvidado tu contraseña?</button>}</form><div className="socialTitle"><span/>próximamente<span/></div><div className="socialRow"><button disabled>G</button><button disabled></button><button disabled>f</button></div><div className="security"><Icon type="shield"/><span>Conexión HTTPS protegida. La autenticación y las contraseñas se gestionan mediante Supabase Auth.</span></div></section><section className="authScenery">{slides.map((src,i)=><div key={src} className={`scenerySlide ${i===slide?'active':''}`} style={{backgroundImage:`url(${src})`}}/>)}<div className="sceneryShade"/><div className={`sceneryCopy ${howOpen?'howIsOpen':''}`}><button type="button" className="welcomeLoginButton" onClick={goLogin}>Iniciar sesión</button><h2>La naturaleza<br/><b>te llama.</b></h2><p>Explora rutas increíbles,<br/>prepara tu aventura<br/>y vive experiencias inolvidables.</p><button type="button" className="howButton" onClick={()=>{if(!howOpen)setHowOpen(true)}}>▷ &nbsp; {howOpen?'Ocultar cómo funciona':'Ver cómo funciona'}</button></div>{howOpen&&<div className="howCascade">{steps.slice(0,visibleSteps).map(([title,text],i)=><div className="howStep" key={title}><span>{String(i+1).padStart(2,'0')}</span><div><b>{title}</b><p>{text}</p></div></div>)}{visibleSteps===steps.length&&<div className="howCta"><small>TU PRÓXIMA AVENTURA EMPIEZA AQUÍ</small><button type="button" onClick={goRegister}>Quiero registrarme</button></div>}</div>}<div className="featureCard"><span>♧</span><div><b>Explora sin límites</b><small>Miles de rutas, mapas offline,<br/>navegación GPS y mucho más.</small></div></div><div className="dots">{slides.map((_,i)=><button key={i} className={i===slide?'active':''} onClick={()=>setSlide(i)}/>)}</div></section></main>;
-if(!profileChecked)return null;if(needsAssessment)return <HikerAssessment user={user} onComplete={()=>setNeedsAssessment(false)}/>;
-const fullName=(user.user_metadata?.name||user.email?.split('@')[0]||'senderista').trim();const firstName=fullName.split(/\s+/)[0];return <><script dangerouslySetInnerHTML={{__html:`window.__CUMBRE_FIRST_NAME__=${JSON.stringify(firstName)};window.dispatchEvent(new Event('cumbre-user-ready'));`}}/><div className="userHello"><div><span>Hola, <b>{firstName}</b> 👋</span></div><button onClick={logout}>Salir</button></div>{children}</>}
+const slides = [
+  "https://images.openai.com/static-rsc-4/hWpUFYjPJdFjaEVVg-UeJxw2-EnEEuemyRfab6fK63JiN3gaQw7BZyfabBhFi2xmuQie6nAkOSwZUzmwFHm7cfiSvunO5zEs1llczHQB67k3xh8JR0hokZPBX1vjh9GVTHEoxwKvXTfqp9q50SLbV9xOuOn_5I-utsHUE8FzHEAPwKlw3KV8Buacw_YvsXq8?purpose=fullsize",
+  "https://images.openai.com/static-rsc-4/nhCJYc7LaxV54StwFiUJzkyOLZ_uYPe8siyu6chMlLm59yTlxiPWg5gc1FAYOWY3RC1GR1GMbHxQjZIQ1-bNnU59JWlpNtgqnowNzm-hyIGAT4TeFLr-k1qWW1Ca44lAJ_UQ8GAWiABRO9chYQxISTxkltHalVH7rGwNh86MdZkpYk0JCSPG_fBkHwZ7qONJ?purpose=fullsize",
+];
+const steps = [
+  [
+    "Encúmbrate te conoce",
+    "Analizamos tu experiencia, orientación, primeros auxilios y actividad previa para recomendarte rutas adecuadas.",
+  ],
+  [
+    "Encuentra tu ruta",
+    "Encúmbrate cruza tu nivel con distancia, desnivel, terreno, duración, meteorología y características de la ruta.",
+  ],
+  [
+    "Prepárate",
+    "Guarda el trazado; en la app Android también puedes descargar cartografía por zona. Revisa material, condiciones, brújula y seguridad.",
+  ],
+  [
+    "Encúmbrate camina contigo",
+    "GPS durante el recorrido, progreso en tiempo real y ayuda para regresar al sendero si te desvías.",
+  ],
+  [
+    "Vive la experiencia",
+    "Fotos, momentos especiales, datos de tu reloj, kilómetros, calorías y estadísticas de la aventura.",
+  ],
+  [
+    "Comparte y progresa",
+    "Completa rutas, conserva tus recuerdos, comparte fotografías y consejos y descubre nuevos retos adaptados a tu evolución.",
+  ],
+];
+const PUBLIC_LEGAL_PATHS = new Set([
+  "/privacidad",
+  "/terminos",
+  "/normas-comunidad",
+  "/eliminar-cuenta",
+]);
+const Icon = ({ type }) => {
+  const c = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+  };
+  if (type === "user")
+    return (
+      <svg {...c}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+      </svg>
+    );
+  if (type === "mail")
+    return (
+      <svg {...c}>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="m3 7 9 6 9-6" />
+      </svg>
+    );
+  if (type === "lock")
+    return (
+      <svg {...c}>
+        <rect x="5" y="10" width="14" height="11" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      </svg>
+    );
+  if (type === "eye")
+    return (
+      <svg {...c}>
+        <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" />
+        <circle cx="12" cy="12" r="2.7" />
+      </svg>
+    );
+  return (
+    <svg {...c}>
+      <path d="M12 3 5 6v5c0 4.8 2.9 8.2 7 10 4.1-1.8 7-5.2 7-10V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+};
+export default function AuthGate({ children }) {
+  const pathname = usePathname();
+  const [ready, setReady] = useState(false),
+    [user, setUser] = useState(null),
+    [needsAssessment, setNeedsAssessment] = useState(false),
+    [profileChecked, setProfileChecked] = useState(false),
+    [mode, setMode] = useState("register"),
+    [slide, setSlide] = useState(0),
+    [howOpen, setHowOpen] = useState(false),
+    [visibleSteps, setVisibleSteps] = useState(0),
+    [registerOpen, setRegisterOpen] = useState(false),
+    [form, setForm] = useState({
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      news: false,
+      terms: false,
+    }),
+    [showPassword, setShowPassword] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [recovery, setRecovery] = useState(false);
+  const nameRef = useRef(null),
+    panelRef = useRef(null);
+  useEffect(() => {
+    let active = true;
+    const query = new URLSearchParams(window.location.search),
+      hash = new URLSearchParams(window.location.hash.slice(1)),
+      recoveryFromUrl =
+        query.get("recovery") === "1" || hash.get("type") === "recovery";
+    if (recoveryFromUrl) {
+      setRecovery(true);
+      setRegisterOpen(true);
+      setMode("login");
+    }
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (active) {
+          const sessionUser = data.session?.user || null;
+          if (sessionUser && !sessionUser.email_confirmed_at) {
+            supabase.auth.signOut();
+            setUser(null);
+            setMode("login");
+            setRegisterOpen(true);
+            setNotice(
+              "Revisa tu correo y confirma tu dirección antes de iniciar sesión.",
+            );
+          } else {
+            setUser(sessionUser);
+          }
+          setReady(true);
+        }
+      })
+      .catch(() => setReady(true));
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const authUser = session?.user || null;
+      setProfileChecked(false);
+      if (event === "SIGNED_IN" && authUser && !authUser.email_confirmed_at) {
+        supabase.auth.signOut();
+        setUser(null);
+        setMode("login");
+        setRegisterOpen(true);
+        setNotice(
+          "Tu cuenta requiere verificación. Por favor, confirma tu correo electrónico a través del enlace enviado.",
+        );
+        return;
+      }
+      if (event === "PASSWORD_RECOVERY") {
+        setRecovery(true);
+        setRegisterOpen(true);
+        setMode("login");
+        return;
+      }
+      setUser(authUser);
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    async function checkProfile() {
+      if (!user || !user.email_confirmed_at) {
+        setProfileChecked(true);
+        setNeedsAssessment(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("profiles")
+        .select("assessment_completed,assessment_skipped")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setNeedsAssessment(
+        !data?.assessment_completed && !data?.assessment_skipped,
+      );
+      setProfileChecked(true);
+    }
+    checkProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+  useEffect(() => {
+    if (user) return;
+    const id = setInterval(
+      () => setSlide((s) => (s + 1) % slides.length),
+      15000,
+    );
+    return () => clearInterval(id);
+  }, [user]);
+  useEffect(() => {
+    if (!howOpen) {
+      setVisibleSteps(0);
+      return;
+    }
+    setVisibleSteps(1);
+    const timers = steps
+      .slice(1)
+      .map((_, i) => setTimeout(() => setVisibleSteps(i + 2), (i + 1) * 5000));
+    return () => timers.forEach(clearTimeout);
+  }, [howOpen]);
+  function openAuth(nextMode) {
+    setMode(nextMode);
+    setError("");
+    setNotice("");
+    setRegisterOpen(true);
+    setHowOpen(false);
+    setTimeout(() => {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (nextMode === "register")
+        setTimeout(() => nameRef.current?.focus(), 500);
+    }, 100);
+  }
+  function goRegister() {
+    openAuth("register");
+  }
+  function goLogin() {
+    openAuth("login");
+  }
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (recovery) {
+      if (!user)
+        return setError(
+          "Este enlace ha caducado o ya se ha utilizado. Solicita uno nuevo.",
+        );
+      if (form.password.length < 8)
+        return setError(
+          "La nueva contraseña debe tener al menos 8 caracteres.",
+        );
+      if (form.password !== form.confirmPassword)
+        return setError(
+          "Las contraseñas no coinciden. Revísalas antes de continuar.",
+        );
+      setBusy(true);
+      const { error } = await supabase.auth.updateUser({
+        password: form.password,
+      });
+      if (error) {
+        if (error.code === "same_password") {
+          await supabase.auth.signOut();
+          window.history.replaceState({}, "", window.location.pathname);
+          setBusy(false);
+          setUser(null);
+          setRecovery(false);
+          setMode("login");
+          setRegisterOpen(true);
+          setForm({
+            name: "",
+            email: "",
+            password: "",
+            confirmPassword: "",
+            news: false,
+            terms: false,
+          });
+          setNotice(
+            "Esa ya era tu contraseña actual. No se ha cambiado: puedes iniciar sesión con ella.",
+          );
+          return;
+        }
+        setBusy(false);
+        return setError(
+          "No hemos podido cambiar la contraseña. Solicita un enlace nuevo e inténtalo otra vez.",
+        );
+      }
+      await supabase.auth.signOut();
+      window.history.replaceState({}, "", window.location.pathname);
+      setBusy(false);
+      setUser(null);
+      setRecovery(false);
+      setMode("login");
+      setRegisterOpen(true);
+      setForm({
+        name: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        news: false,
+        terms: false,
+      });
+      setNotice(
+        "Contraseña actualizada correctamente. Ya puedes iniciar sesión.",
+      );
+      return;
+    }
+    const email = form.email.trim().toLowerCase();
+    if (!email || !form.password)
+      return setError("Introduce tu correo y contraseña.");
+    if (mode === "register" && form.password !== form.confirmPassword)
+      return setError(
+        "Las contraseñas no coinciden. Revísalas antes de crear la cuenta.",
+      );
+    setBusy(true);
+    if (mode === "register") {
+      if (!form.name.trim()) {
+        setBusy(false);
+        return setError("Dinos cómo quieres que te llamemos.");
+      }
+      if (form.password.length < 8) {
+        setBusy(false);
+        return setError("La contraseña debe tener al menos 8 caracteres.");
+      }
+      if (!form.terms) {
+        setBusy(false);
+        return setError(
+          "Debes aceptar los términos y la política de privacidad.",
+        );
+      }
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: form.password,
+        options: {
+          data: { name: form.name.trim(), newsletter: form.news },
+          emailRedirectTo: window.location.origin,
+        },
+      });
+      setBusy(false);
+      if (error) return setError(error.message);
+      if (!data.session || !data.user?.email_confirmed_at) {
+        setNotice(
+          "Cuenta creada. Revisa tu correo y confirma tu dirección para entrar en Encúmbrate.",
+        );
+        setUser(null);
+      } else {
+        setUser(data.user);
+      }
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: form.password,
+      });
+      setBusy(false);
+      if (error)
+        return setError(
+          "Correo o contraseña incorrectos, o el correo todavía no ha sido confirmado.",
+        );
+      if (data.user && !data.user.email_confirmed_at) {
+        await supabase.auth.signOut();
+        return setError(
+          "Debes confirmar tu dirección de correo electrónico antes de poder acceder.",
+        );
+      }
+    }
+  }
+  async function forgotPassword() {
+    setError("");
+    setNotice("");
+    const email = form.email.trim().toLowerCase();
+    if (!email) return setError("Escribe primero tu correo electrónico.");
+    setBusy(true);
+    const redirectTo = new URL(
+      "/?recovery=1",
+      window.location.origin,
+    ).toString();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    setBusy(false);
+    if (error) return setError(error.message);
+    setNotice(
+      "Te hemos enviado un enlace para crear una contraseña nueva. Revisa tu correo.",
+    );
+  }
+  async function logout() {
+    await supabase.auth.signOut();
+    setMode("login");
+    setRegisterOpen(true);
+    setForm({
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      news: false,
+      terms: false,
+    });
+  }
+  if (PUBLIC_LEGAL_PATHS.has(pathname)) return children;
+  if (!ready) return null;
+  if (!user || recovery || !user.email_confirmed_at)
+    return (
+      <main
+        className={`authPage ${registerOpen || recovery ? "registerOpen" : ""}`}
+      >
+        <section className="authPanel" ref={panelRef}>
+          <div className="authBrand">
+            <span className="brandPeak">▲</span>
+            <strong>ENCÚMBRATE</strong>
+            <small>
+              DESCUBRE · PREPARA · VIVE · <b>DISFRUTA</b>
+            </small>
+          </div>
+          <h1>{recovery ? "Nueva contraseña" : "Bienvenido a Encúmbrate"}</h1>
+          <p className="authIntro">
+            {recovery
+              ? "Elige una contraseña nueva y segura. La contraseña anterior no se puede consultar."
+              : "Tu próxima aventura empieza aquí."}
+          </p>
+          {!recovery && (
+            <div className="authTabs">
+              <button
+                type="button"
+                className={mode === "register" ? "active" : ""}
+                onClick={() => {
+                  setMode("register");
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                Crear cuenta
+              </button>
+              <button
+                type="button"
+                className={mode === "login" ? "active" : ""}
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                Iniciar sesión
+              </button>
+            </div>
+          )}
+          <form onSubmit={submit} className="authForm">
+            {mode === "register" && !recovery && (
+              <div className="field">
+                <Icon type="user" />
+                <input
+                  ref={nameRef}
+                  autoComplete="name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Nombre completo"
+                />
+              </div>
+            )}
+            {!recovery && (
+              <div className="field">
+                <Icon type="mail" />
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="Correo electrónico"
+                />
+              </div>
+            )}
+            <div className="field passwordField">
+              <Icon type="lock" />
+              <input
+                type={showPassword ? "text" : "password"}
+                autoComplete={
+                  recovery || mode === "register"
+                    ? "new-password"
+                    : "current-password"
+                }
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder={recovery ? "Nueva contraseña" : "Contraseña"}
+              />
+              <button
+                type="button"
+                className="passwordEye"
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                <Icon type="eye" />
+              </button>
+            </div>
+            {(mode === "register" || recovery) && (
+              <div
+                className={`field passwordField ${form.confirmPassword && form.password !== form.confirmPassword ? "fieldMismatch" : ""}`}
+              >
+                <Icon type="lock" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={form.confirmPassword}
+                  onChange={(e) =>
+                    setForm({ ...form, confirmPassword: e.target.value })
+                  }
+                  placeholder={
+                    recovery
+                      ? "Repite la nueva contraseña"
+                      : "Confirmar contraseña"
+                  }
+                />
+                <button
+                  type="button"
+                  className="passwordEye"
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  <Icon type="eye" />
+                </button>
+              </div>
+            )}
+            {(mode === "register" || recovery) &&
+              form.confirmPassword &&
+              form.password !== form.confirmPassword && (
+                <div className="passwordMismatch">
+                  Las contraseñas deben ser iguales.
+                </div>
+              )}
+            {mode === "register" && !recovery && (
+              <>
+                <label className="authCheck">
+                  <input
+                    type="checkbox"
+                    checked={form.terms}
+                    onChange={(e) =>
+                      setForm({ ...form, terms: e.target.checked })
+                    }
+                  />
+                  <span>
+                    Acepto los <b>Términos y Condiciones</b>
+                    <br />y la <b>Política de Privacidad</b>
+                  </span>
+                </label>
+                <label className="authCheck">
+                  <input
+                    type="checkbox"
+                    checked={form.news}
+                    onChange={(e) =>
+                      setForm({ ...form, news: e.target.checked })
+                    }
+                  />
+                  <span>
+                    Quiero recibir novedades, rutas destacadas
+                    <br />y consejos en mi correo electrónico.
+                  </span>
+                </label>
+              </>
+            )}
+            {error && <div className="authError">{error}</div>}
+            {notice && (
+              <div
+                className="authError"
+                style={{ background: "#eef7e8", color: "#174d38" }}
+              >
+                {notice}
+              </div>
+            )}
+            <button
+              disabled={
+                busy ||
+                ((mode === "register" || recovery) &&
+                  (!form.confirmPassword ||
+                    form.password !== form.confirmPassword))
+              }
+              className="authPrimary"
+            >
+              {busy
+                ? "Procesando…"
+                : recovery
+                  ? "Guardar nueva contraseña"
+                  : mode === "register"
+                    ? "Crear cuenta"
+                    : "Entrar en Encúmbrate"}
+            </button>
+            {mode === "login" && !recovery && (
+              <button
+                type="button"
+                onClick={forgotPassword}
+                disabled={busy}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "#174d38",
+                  textDecoration: "underline",
+                }}
+              >
+                ¿Has olvidado tu contraseña?
+              </button>
+            )}
+          </form>
+          <div className="socialTitle">
+            <span />
+            próximamente
+            <span />
+          </div>
+          <div className="socialRow">
+            <button disabled>G</button>
+            <button disabled></button>
+            <button disabled>f</button>
+          </div>
+          <div className="security">
+            <Icon type="shield" />
+            <span>
+              Conexión HTTPS protegida. La autenticación y las contraseñas se
+              gestionan mediante Supabase Auth.
+            </span>
+          </div>
+        </section>
+        <section className="authScenery">
+          {slides.map((src, i) => (
+            <div
+              key={src}
+              className={`scenerySlide ${i === slide ? "active" : ""}`}
+              style={{ backgroundImage: `url(${src})` }}
+            />
+          ))}
+          <div className="sceneryShade" />
+          <div className={`sceneryCopy ${howOpen ? "howIsOpen" : ""}`}>
+            <button
+              type="button"
+              className="welcomeLoginButton"
+              onClick={goLogin}
+            >
+              Iniciar sesión
+            </button>
+            <h2>
+              La naturaleza
+              <br />
+              <b>te llama.</b>
+            </h2>
+            <p>
+              Explora rutas increíbles,
+              <br />
+              prepara tu aventura
+              <br />y vive experiencias inolvidables.
+            </p>
+            <button
+              type="button"
+              className="howButton"
+              onClick={() => {
+                if (!howOpen) setHowOpen(true);
+              }}
+            >
+              ▷ &nbsp; {howOpen ? "Ocultar cómo funciona" : "Ver cómo funciona"}
+            </button>
+          </div>
+          {howOpen && (
+            <div className="howCascade">
+              {steps.slice(0, visibleSteps).map(([title, text], i) => (
+                <div className="howStep" key={title}>
+                  <span>{String(i + 1).padStart(2, "0")}</span>
+                  <div>
+                    <b>{title}</b>
+                    <p>{text}</p>
+                  </div>
+                </div>
+              ))}
+              {visibleSteps === steps.length && (
+                <div className="howCta">
+                  <small>TU PRÓXIMA AVENTURA EMPIEZA AQUÍ</small>
+                  <button type="button" onClick={goRegister}>
+                    Quiero registrarme
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="featureCard">
+            <span>♧</span>
+            <div>
+              <b>Explora sin límites</b>
+              <small>
+                Miles de rutas, trazados offline,
+                <br />
+                navegación GPS y mucho más.
+              </small>
+            </div>
+          </div>
+          <div className="dots">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                className={i === slide ? "active" : ""}
+                onClick={() => setSlide(i)}
+              />
+            ))}
+          </div>
+        </section>
+      </main>
+    );
+  if (!profileChecked) return null;
+  if (needsAssessment)
+    return (
+      <HikerAssessment
+        user={user}
+        onComplete={() => setNeedsAssessment(false)}
+      />
+    );
+  const fullName = (
+    user.user_metadata?.name ||
+    user.email?.split("@")[0] ||
+    "senderista"
+  ).trim();
+  const firstName = fullName.split(/\s+/)[0];
+  return (
+    <>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.__CUMBRE_FIRST_NAME__=${JSON.stringify(firstName)};window.dispatchEvent(new Event('cumbre-user-ready'));`,
+        }}
+      />
+      <div className="userHello">
+        <div>
+          <span>
+            Hola, <b>{firstName}</b> 👋
+          </span>
+        </div>
+        <button onClick={logout}>Salir</button>
+      </div>
+      {children}
+    </>
+  );
+}
