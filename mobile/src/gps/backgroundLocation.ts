@@ -73,23 +73,33 @@ export async function beginNativeTracking(route: { id: string; name: string; lev
     startedAt: activity.started_at ?? new Date().toISOString(),
   };
   await writeSession(session);
-  await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-    accuracy: Location.Accuracy.BestForNavigation,
-    activityType: Location.ActivityType.Fitness,
-    distanceInterval: 5,
-    timeInterval: 5000,
-    deferredUpdatesDistance: 20,
-    deferredUpdatesInterval: 15000,
-    pausesUpdatesAutomatically: false,
-    showsBackgroundLocationIndicator: true,
-    foregroundService: {
-      notificationTitle: 'Encúmbrate · ruta en marcha',
-      notificationBody: 'Seguimos guardando tu recorrido GPS.',
-      notificationColor: '#08633f',
-    },
-  });
+  await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, trackingOptions);
   return session;
 }
+
+export async function resumeNativeTracking() {
+  if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) return;
+  const session = await readSession();
+  if (!session) throw new Error('No hay ninguna ruta activa que reanudar.');
+  await requestTrackingPermissions();
+  await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, trackingOptions);
+}
+
+const trackingOptions: Location.LocationTaskOptions = {
+  accuracy: Location.Accuracy.BestForNavigation,
+  activityType: Location.ActivityType.Fitness,
+  distanceInterval: 5,
+  timeInterval: 5000,
+  deferredUpdatesDistance: 20,
+  deferredUpdatesInterval: 15000,
+  pausesUpdatesAutomatically: false,
+  showsBackgroundLocationIndicator: true,
+  foregroundService: {
+    notificationTitle: 'Encúmbrate · ruta en marcha',
+    notificationBody: 'Seguimos guardando tu recorrido GPS.',
+    notificationColor: '#08633f',
+  },
+};
 
 export async function stopNativeTracking() {
   if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) {
