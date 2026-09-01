@@ -44,6 +44,13 @@ export function shouldUseHeadingSource(currentSource,nextSource){
  return nextSource==='Sensor Android avanzado';
 }
 
+export function calibrationWarning(dismissed,{ios=false,accuracy=NaN,spread=0}={}){
+ if(dismissed)return '';
+ if(ios&&Number.isFinite(accuracy)&&accuracy>35)return 'La precisión magnética es baja. Aleja el móvil de fundas magnéticas, llaves, altavoces y objetos metálicos. Después muévelo lentamente dibujando un 8 en el aire.';
+ if(spread>18)return 'Señal magnética inestable. Aleja el móvil de objetos metálicos y calibra el sensor moviendo el teléfono lentamente en forma de 8.';
+ return '';
+}
+
 export function headingFromQuaternion(quaternion){
  if(!quaternion||quaternion.length<4)return null;
  const[x,y,z,w]=quaternion.map(Number);
