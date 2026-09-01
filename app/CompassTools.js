@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import './compass-tools.css';
 import './compass-professional.css';
 import './compass-course-entry.css';
-import {angleDifference,circularMean,circularSpread,normalizeHeading,smoothHeading} from './compassMath';
+import {adaptiveHeading,angleDifference,circularMean,circularSpread,normalizeHeading} from './compassMath';
 
 const DIRECTIONS=['N','NE','E','SE','S','SO','O','NO'];
 const COURSE=[
@@ -29,15 +29,15 @@ export default function CompassTools(){
   const raw=ios?event.webkitCompassHeading:Number.isFinite(event.alpha)?360-event.alpha+screenAngle():null;
   if(raw===null)return;
   const value=normalizeHeading(raw),now=performance.now(),lastRaw=lastRawRef.current;
-  if(lastRaw&&now-lastRaw.at<300&&Math.abs(angleDifference(value,lastRaw.value))>45)return;
+  if(lastRaw&&now-lastRaw.at<70&&Math.abs(angleDifference(value,lastRaw.value))>135)return;
   lastRawRef.current={value,at:now};
   const samples=samplesRef.current;samples.push(value);if(samples.length>24)samples.shift();
   if(samples.length<8){setCalibration('calibrating');return}
-  const recent=samples.slice(-16),mean=circularMean(recent),spread=circularSpread(recent,mean),iosAccuracy=Number(event.webkitCompassAccuracy),accurateIos=!ios||!Number.isFinite(iosAccuracy)||iosAccuracy<0||iosAccuracy<=35,stable=recent.length>=12&&spread<=10&&accurateIos;
+  const recent=samples.slice(-12),displaySamples=samples.slice(-5),mean=circularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),iosAccuracy=Number(event.webkitCompassAccuracy),accurateIos=!ios||!Number.isFinite(iosAccuracy)||iosAccuracy<0||iosAccuracy<=35,stable=recent.length>=10&&spread<=8&&accurateIos;
   setCalibration(stable?'stable':'calibrating');
   if(now-lastPaintRef.current<100)return;
   lastPaintRef.current=now;
-  const next=smoothHeading(headingRef.current,mean,stable?{factor:.18,maxStep:3,deadband:.6}:{factor:.06,maxStep:1.2,deadband:1});
+  const next=adaptiveHeading(headingRef.current,mean);
   headingRef.current=next;setHeading(next);
   setError(stable?'':ios&&Number.isFinite(iosAccuracy)&&iosAccuracy>35?'Aleja el móvil de fundas magnéticas, llaves y objetos metálicos.':spread>18?'Señal magnética inestable. Calibra el móvil en forma de 8.':'')
  }
