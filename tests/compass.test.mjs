@@ -46,10 +46,11 @@ test('convierte el cuaternión Android usando la parte superior del móvil',()=>
  assert.equal(headingFromQuaternion(null),null);
 });
 
-test('el sensor Android avanzado sustituye al origen compatible congelado',()=>{
- assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),true);
- assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),false);
+test('el sensor Android normal prevalece y el avanzado queda como respaldo',()=>{
+ assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),false);
+ assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),true);
  assert.equal(shouldUseHeadingSource('','Sensor Android'),true);
+ assert.equal(shouldUseHeadingSource('','Sensor Android avanzado'),true);
 });
 
 test('el aviso magnético no reaparece después de pulsar Entendido',()=>{
