@@ -4,7 +4,9 @@ export const COMPASS_TUNING=Object.freeze({
  displayWindow:9,
  spreadWindow:12,
  outlierLimitDegrees:22,
- deadbandDegrees:2
+ deadbandDegrees:2,
+ maxAngularRate:320,
+ spikeConfirmationDegrees:12
 });
 
 export function normalizeHeading(value){
@@ -36,6 +38,14 @@ export function robustCircularMean(values,limit=COMPASS_TUNING.outlierLimitDegre
  const firstMean=circularMean(values);
  const inliers=values.filter(value=>Math.abs(angleDifference(value,firstMean))<=limit);
  return circularMean(inliers.length>=Math.ceil(values.length/2)?inliers:values);
+}
+
+export function headingSampleDecision(previous,candidate,elapsedMs,pending=null){
+ if(!Number.isFinite(previous))return {accept:true,pending:null};
+ const elapsed=Math.max(0,Number(elapsedMs)||0),distance=Math.abs(angleDifference(candidate,previous)),allowed=8+COMPASS_TUNING.maxAngularRate*elapsed/1000;
+ if(distance<=allowed)return {accept:true,pending:null};
+ if(pending&&Math.abs(angleDifference(candidate,pending.value))<=COMPASS_TUNING.spikeConfirmationDegrees)return {accept:true,pending:null};
+ return {accept:false,pending:{value:normalizeHeading(candidate)}};
 }
 
 export function smoothHeading(current,target,{factor=.18,maxStep=3,deadband=.6}={}){
