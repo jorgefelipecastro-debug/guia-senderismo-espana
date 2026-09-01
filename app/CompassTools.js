@@ -4,7 +4,7 @@ import './compass-tools.css';
 import './compass-professional.css';
 import './compass-course-entry.css';
 import './compass-warning.css';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,nextCalibrationState,normalizeHeading,shouldUseHeadingSource} from './compassMath';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource} from './compassMath';
 
 const DIRECTIONS=['N','NE','E','SE','S','SO','O','NO'];
 const COURSE=[
@@ -39,16 +39,16 @@ export default function CompassTools(){
   lastRawRef.current={value,at:now};
   const samples=samplesRef.current;samples.push(value);if(samples.length>24)samples.shift();
   if(samples.length<8){setCalibration('calibrating');return}
-  const recent=samples.slice(-12),displaySamples=samples.slice(-9),mean=circularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,spread,accurateIos);
+  const recent=samples.slice(-COMPASS_TUNING.spreadWindow),displaySamples=samples.slice(-COMPASS_TUNING.displayWindow),mean=robustCircularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,spread,accurateIos);
   calibrationRef.current=nextCalibration;setCalibration(nextCalibration);
-  if(now-lastPaintRef.current<100)return;
+  if(now-lastPaintRef.current<1000/COMPASS_TUNING.visualFrequencyHz)return;
   lastPaintRef.current=now;
   const next=adaptiveHeading(headingRef.current,mean);
   headingRef.current=next;setHeading(next);
   const notice=calibrationWarning(warningDismissedRef.current,{ios,accuracy,spread});
   if(notice)setWarning(notice)
  }
- function startGenericSensor(){if(genericSensorRef.current||typeof window.AbsoluteOrientationSensor!=='function')return;try{const sensor=new window.AbsoluteOrientationSensor({frequency:20,referenceFrame:'device'});genericSensorRef.current=sensor;sensor.addEventListener('reading',()=>{const value=headingFromQuaternion(sensor.quaternion);if(value===null){setCalibration('calibrating');return}consumeHeading(value+screenAngle(),{source:'Sensor Android avanzado'})});sensor.addEventListener('error',()=>{genericSensorRef.current=null;if(headingRef.current===null)setError('Chrome está bloqueando los sensores de movimiento. Actívalos en los permisos del sitio y vuelve a intentarlo.')});sensor.start()}catch{genericSensorRef.current=null}}
+ function startGenericSensor(){if(genericSensorRef.current||typeof window.AbsoluteOrientationSensor!=='function')return;try{const sensor=new window.AbsoluteOrientationSensor({frequency:COMPASS_TUNING.sensorFrequencyHz,referenceFrame:'device'});genericSensorRef.current=sensor;sensor.addEventListener('reading',()=>{const value=headingFromQuaternion(sensor.quaternion);if(value===null){setCalibration('calibrating');return}consumeHeading(value+screenAngle(),{source:'Sensor Android avanzado'})});sensor.addEventListener('error',()=>{genericSensorRef.current=null;if(headingRef.current===null)setError('Chrome está bloqueando los sensores de movimiento. Actívalos en los permisos del sitio y vuelve a intentarlo.')});sensor.start()}catch{genericSensorRef.current=null}}
  function attachSensor(){if(listeningRef.current)return;listeningRef.current=true;window.addEventListener('deviceorientationabsolute',readOrientation,true);window.addEventListener('deviceorientation',readOrientation,true)}
  function detachSensor(){listeningRef.current=false;window.removeEventListener('deviceorientationabsolute',readOrientation,true);window.removeEventListener('deviceorientation',readOrientation,true);try{genericSensorRef.current?.stop()}catch{}genericSensorRef.current=null;resetSensor()}
  async function activate(){try{setError('');setCalibration('waiting');if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){const permission=await DeviceOrientationEvent.requestPermission();if(permission!=='granted')return setError('Activa el permiso de movimiento y orientación en el navegador.')}setNeedsPermission(false);attachSensor();startGenericSensor();setTimeout(()=>{if(headingRef.current===null)setError('Sin lectura. En Chrome abre Configuración > Configuración de sitios > Sensores de movimiento y permite el acceso.')},2500)}catch{setError('No se ha podido activar el sensor de orientación.')}}
