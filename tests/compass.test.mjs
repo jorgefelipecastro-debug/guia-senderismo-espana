@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,circularMean,circularSpread,headingFromQuaternion,normalizeHeading,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,normalizeHeading,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -41,4 +41,9 @@ test('el sensor Android avanzado sustituye al origen compatible congelado',()=>{
  assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),true);
  assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),false);
  assert.equal(shouldUseHeadingSource('','Sensor Android'),true);
+});
+
+test('el aviso magnético no reaparece después de pulsar Entendido',()=>{
+ assert.match(calibrationWarning(false,{spread:30}),/inestable/);
+ assert.equal(calibrationWarning(true,{spread:30}),'');
 });
