@@ -1,0 +1,4 @@
+.aliasLoading{text-align:center}
+.aliasLoading i{display:block;width:28px;height:28px;margin:0 auto 14px;border:3px solid #d4e3dc;border-top-color:#08704e;border-radius:50%;animation:chatLoading .8s linear infinite}
+.aliasLoading button{margin-top:14px}
+@keyframes chatLoading{to{transform:rotate(360deg)}}
