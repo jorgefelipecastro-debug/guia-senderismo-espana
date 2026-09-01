@@ -39,6 +39,11 @@ export function adaptiveHeading(current,target){
  return smoothHeading(current,target,{factor:.5,maxStep:3,deadband:.9});
 }
 
+export function shouldUseHeadingSource(currentSource,nextSource){
+ if(!currentSource||currentSource===nextSource)return true;
+ return nextSource==='Sensor Android avanzado';
+}
+
 export function headingFromQuaternion(quaternion){
  if(!quaternion||quaternion.length<4)return null;
  const[x,y,z,w]=quaternion.map(Number);
