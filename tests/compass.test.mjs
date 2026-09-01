@@ -25,7 +25,9 @@ test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
  assert.equal(adaptiveHeading(0,120),90);
  assert.equal(adaptiveHeading(359,359.5),359);
  assert.equal(adaptiveHeading(100,101.4),100);
- assert.ok(adaptiveHeading(100,108)>103&&adaptiveHeading(100,108)<105);
+ assert.equal(adaptiveHeading(100,101.9),100);
+ assert.ok(adaptiveHeading(100,108)>102&&adaptiveHeading(100,108)<103);
+ assert.ok(adaptiveHeading(100,112)>103&&adaptiveHeading(100,112)<105);
  const corrected=adaptiveHeading(350,20);
  assert.ok(corrected>350||corrected<20);
  assert.ok(Math.abs(angleDifference(20,corrected))<8);
