@@ -22,11 +22,11 @@ test('suaviza por el camino corto y limita los saltos visuales',()=>{
 });
 
 test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
- assert.equal(adaptiveHeading(0,120),55);
+ assert.equal(adaptiveHeading(0,120),90);
  assert.equal(adaptiveHeading(359,359.5),359);
  const corrected=adaptiveHeading(350,20);
  assert.ok(corrected>350||corrected<20);
- assert.ok(Math.abs(angleDifference(20,corrected))<30);
+ assert.ok(Math.abs(angleDifference(20,corrected))<8);
 });
 
 test('convierte el cuaternión Android usando la parte superior del móvil',()=>{
