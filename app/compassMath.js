@@ -38,3 +38,14 @@ export function adaptiveHeading(current,target){
  if(distance>=7)return smoothHeading(current,target,{factor:.34,maxStep:12,deadband:.35});
  return smoothHeading(current,target,{factor:.2,maxStep:4,deadband:.8});
 }
+
+export function headingFromQuaternion(quaternion){
+ if(!quaternion||quaternion.length<4)return null;
+ const[x,y,z,w]=quaternion.map(Number);
+ if(![x,y,z,w].every(Number.isFinite))return null;
+ // Proyecta el eje +Y del dispositivo (parte superior del móvil) sobre
+ // los ejes terrestres X=este e Y=norte.
+ const east=2*(x*y-z*w),north=1-2*(x*x+z*z);
+ if(Math.hypot(east,north)<.25)return null;
+ return normalizeHeading(Math.atan2(east,north)*180/Math.PI);
+}
