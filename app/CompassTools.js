@@ -4,7 +4,7 @@ import './compass-tools.css';
 import './compass-professional.css';
 import './compass-course-entry.css';
 import './compass-warning.css';
-import {adaptiveHeading,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,headingSampleDecision,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource} from './compassMath';
+import {adaptiveHeading,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,headingSampleDecision,isCoherentHeadingMotion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource} from './compassMath';
 
 const DIRECTIONS=['N','NE','E','SE','S','SO','O','NO'];
 const COURSE=[
@@ -42,13 +42,13 @@ export default function CompassTools(){
   lastRawRef.current={value,at:now};
   const samples=samplesRef.current;samples.push(value);if(samples.length>24)samples.shift();
   if(samples.length<8){setCalibration('calibrating');return}
-  const recent=samples.slice(-COMPASS_TUNING.spreadWindow),displaySamples=samples.slice(-COMPASS_TUNING.displayWindow),mean=robustCircularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,spread,accurateIos);
+  const recent=samples.slice(-COMPASS_TUNING.spreadWindow),displaySamples=samples.slice(-COMPASS_TUNING.displayWindow),mean=robustCircularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),intentionalTurn=isCoherentHeadingMotion(recent),qualitySpread=intentionalTurn?Math.min(spread,9):spread,accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,qualitySpread,accurateIos);
   calibrationRef.current=nextCalibration;setCalibration(nextCalibration);
   if(now-lastPaintRef.current<1000/COMPASS_TUNING.visualFrequencyHz)return;
   lastPaintRef.current=now;
   const next=adaptiveHeading(headingRef.current,mean);
   headingRef.current=next;setHeading(next);
-  const notice=calibrationWarning(warningDismissedRef.current,{ios,accuracy,spread});
+  const notice=calibrationWarning(warningDismissedRef.current,{ios,accuracy,spread:qualitySpread});
   if(notice)setWarning(notice)
  }
  function startGenericSensor(){if(genericSensorRef.current||typeof window.AbsoluteOrientationSensor!=='function')return;try{const sensor=new window.AbsoluteOrientationSensor({frequency:COMPASS_TUNING.sensorFrequencyHz,referenceFrame:'device'});genericSensorRef.current=sensor;sensor.addEventListener('reading',()=>{const value=headingFromQuaternion(sensor.quaternion);if(value===null){setCalibration('calibrating');return}consumeHeading(value+screenAngle(),{source:'Sensor Android avanzado'})});sensor.addEventListener('error',()=>{genericSensorRef.current=null;if(headingRef.current===null)setError('Chrome está bloqueando los sensores de movimiento. Actívalos en los permisos del sitio y vuelve a intentarlo.')});sensor.start()}catch{genericSensorRef.current=null}}
