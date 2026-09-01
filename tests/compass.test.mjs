@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,circularMean,circularSpread,headingFromQuaternion,normalizeHeading,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,circularMean,circularSpread,headingFromQuaternion,normalizeHeading,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -35,4 +35,10 @@ test('convierte el cuaternión Android usando la parte superior del móvil',()=>
  assert.ok(Math.abs(headingFromQuaternion([0,0,-half,half])-90)<.0001);
  assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-270)<.0001);
  assert.equal(headingFromQuaternion(null),null);
+});
+
+test('el sensor Android avanzado sustituye al origen compatible congelado',()=>{
+ assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),true);
+ assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),false);
+ assert.equal(shouldUseHeadingSource('','Sensor Android'),true);
 });
