@@ -4,7 +4,7 @@ import './compass-tools.css';
 import './compass-professional.css';
 import './compass-course-entry.css';
 import './compass-warning.css';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,normalizeHeading,shouldUseHeadingSource} from './compassMath';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,nextCalibrationState,normalizeHeading,shouldUseHeadingSource} from './compassMath';
 
 const DIRECTIONS=['N','NE','E','SE','S','SO','O','NO'];
 const COURSE=[
@@ -16,11 +16,11 @@ const COURSE=[
 ];
 
 export default function CompassTools(){
- const[open,setOpen]=useState(false),[course,setCourse]=useState(false),[courseStep,setCourseStep]=useState(0),[heading,setHeading]=useState(null),[error,setError]=useState(''),[warning,setWarning]=useState(''),[needsPermission,setNeedsPermission]=useState(false),[calibration,setCalibration]=useState('waiting'),[sensorSource,setSensorSource]=useState(''),headingRef=useRef(null),listeningRef=useRef(false),samplesRef=useRef([]),lastRawRef=useRef(null),lastPaintRef=useRef(0),absoluteSeenRef=useRef(false),genericSensorRef=useRef(null),sourceRef=useRef(''),warningDismissedRef=useRef(false);
+ const[open,setOpen]=useState(false),[course,setCourse]=useState(false),[courseStep,setCourseStep]=useState(0),[heading,setHeading]=useState(null),[error,setError]=useState(''),[warning,setWarning]=useState(''),[needsPermission,setNeedsPermission]=useState(false),[calibration,setCalibration]=useState('waiting'),[sensorSource,setSensorSource]=useState(''),headingRef=useRef(null),listeningRef=useRef(false),samplesRef=useRef([]),lastRawRef=useRef(null),lastPaintRef=useRef(0),absoluteSeenRef=useRef(false),genericSensorRef=useRef(null),sourceRef=useRef(''),warningDismissedRef=useRef(false),calibrationRef=useRef('waiting');
  useEffect(()=>{if(sessionStorage.getItem('encumbrate:compass-open')==='1')setOpen(true);const show=()=>{sessionStorage.setItem('encumbrate:compass-open','1');setOpen(true)},learn=()=>{setCourseStep(0);setCourse(true)};window.addEventListener('encumbrate:open-compass',show);window.addEventListener('encumbrate:open-compass-course',learn);return()=>{window.removeEventListener('encumbrate:open-compass',show);window.removeEventListener('encumbrate:open-compass-course',learn)}},[]);
  useEffect(()=>{if(!open)return;resetSensor();warningDismissedRef.current=false;setWarning('');setHeading(null);setSensorSource('');setCalibration('waiting');setError('');const orientationAvailable=typeof DeviceOrientationEvent!=='undefined',genericAvailable=typeof window.AbsoluteOrientationSensor==='function';if(!orientationAvailable&&!genericAvailable){setError('Este navegador no permite acceder al sensor de orientación.');return}const requiresTap=orientationAvailable&&typeof DeviceOrientationEvent.requestPermission==='function';setNeedsPermission(requiresTap);if(!requiresTap)attachSensor();const fallback=setTimeout(startGenericSensor,900),timer=setTimeout(()=>{if(headingRef.current===null){setCalibration('calibrating');setError('No recibimos datos del sensor. Pulsa “Activar brújula” y comprueba que Chrome tenga permitidos los sensores de movimiento.')}},4500);return()=>{clearTimeout(fallback);clearTimeout(timer);detachSensor()}},[open]);
  function screenAngle(){return Number(screen.orientation?.angle)||Number(window.orientation)||0}
- function resetSensor(){headingRef.current=null;samplesRef.current=[];lastRawRef.current=null;lastPaintRef.current=0;absoluteSeenRef.current=false;sourceRef.current=''}
+ function resetSensor(){headingRef.current=null;samplesRef.current=[];lastRawRef.current=null;lastPaintRef.current=0;absoluteSeenRef.current=false;sourceRef.current='';calibrationRef.current='waiting'}
  function readOrientation(event){
   const ios=Number.isFinite(event.webkitCompassHeading),absolute=ios||event.type==='deviceorientationabsolute'||event.absolute===true;
   if(event.type==='deviceorientationabsolute')absoluteSeenRef.current=true;
@@ -39,8 +39,8 @@ export default function CompassTools(){
   lastRawRef.current={value,at:now};
   const samples=samplesRef.current;samples.push(value);if(samples.length>24)samples.shift();
   if(samples.length<8){setCalibration('calibrating');return}
-  const recent=samples.slice(-10),displaySamples=samples.slice(-3),mean=circularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,stable=recent.length>=8&&spread<=8&&accurateIos;
-  setCalibration(stable?'stable':'calibrating');
+  const recent=samples.slice(-10),displaySamples=samples.slice(-5),mean=circularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,spread,accurateIos);
+  calibrationRef.current=nextCalibration;setCalibration(nextCalibration);
   if(now-lastPaintRef.current<100)return;
   lastPaintRef.current=now;
   const next=adaptiveHeading(headingRef.current,mean);
