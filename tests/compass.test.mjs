@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,headingSampleDecision,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,headingSampleDecision,isCoherentHeadingMotion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -31,6 +31,12 @@ test('el guardia magnético rechaza picos y confirma giros reales',()=>{
  assert.equal(confirmed.pending,null);
  assert.equal(headingSampleDecision(10,22,50,null).accept,true);
  assert.equal(headingSampleDecision(undefined,220,0,null).accept,true);
+});
+
+test('distingue un giro rápido de una interferencia magnética',()=>{
+ assert.equal(isCoherentHeadingMotion([350,358,6,15,24,35]),true);
+ assert.equal(isCoherentHeadingMotion([10,38,5,42,8,36]),false);
+ assert.equal(isCoherentHeadingMotion([100,100.4,99.8,100.2]),false);
 });
 
 test('suaviza por el camino corto y limita los saltos visuales',()=>{
