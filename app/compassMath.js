@@ -47,7 +47,10 @@ export function nextCalibrationState(current,spread,accurate=true){
 
 export function shouldUseHeadingSource(currentSource,nextSource){
  if(!currentSource||currentSource===nextSource)return true;
- return nextSource==='Sensor Android avanzado';
+ // DeviceOrientation absoluto es la lectura ya compensada por Android y debe
+ // prevalecer. El Generic Sensor queda como respaldo para navegadores que no
+ // entregan esa lectura; mezclar ambos provoca saltos y bloqueos aparentes.
+ return nextSource!=='Sensor Android avanzado';
 }
 
 export function calibrationWarning(dismissed,{ios=false,accuracy=NaN,spread=0}={}){
