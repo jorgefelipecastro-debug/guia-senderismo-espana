@@ -1,3 +1,12 @@
+export const COMPASS_TUNING=Object.freeze({
+ sensorFrequencyHz:20,
+ visualFrequencyHz:10,
+ displayWindow:9,
+ spreadWindow:12,
+ outlierLimitDegrees:22,
+ deadbandDegrees:2
+});
+
 export function normalizeHeading(value){
  return ((value%360)+360)%360;
 }
@@ -22,6 +31,13 @@ export function circularSpread(values,mean=circularMean(values)){
  return Math.max(...values.map(value=>Math.abs(angleDifference(value,mean))));
 }
 
+export function robustCircularMean(values,limit=COMPASS_TUNING.outlierLimitDegrees){
+ if(!values.length)return null;
+ const firstMean=circularMean(values);
+ const inliers=values.filter(value=>Math.abs(angleDifference(value,firstMean))<=limit);
+ return circularMean(inliers.length>=Math.ceil(values.length/2)?inliers:values);
+}
+
 export function smoothHeading(current,target,{factor=.18,maxStep=3,deadband=.6}={}){
  if(current===null||!Number.isFinite(current))return normalizeHeading(target);
  const delta=angleDifference(target,current);
@@ -36,7 +52,7 @@ export function adaptiveHeading(current,target){
  if(distance>=45)return smoothHeading(current,target,{factor:.9,maxStep:90,deadband:0});
  if(distance>=18)return smoothHeading(current,target,{factor:.75,maxStep:28,deadband:.3});
  if(distance>=8)return smoothHeading(current,target,{factor:.32,maxStep:5,deadband:1});
- return smoothHeading(current,target,{factor:.14,maxStep:.8,deadband:2});
+ return smoothHeading(current,target,{factor:.14,maxStep:.8,deadband:COMPASS_TUNING.deadbandDegrees});
 }
 
 export function nextCalibrationState(current,spread,accurate=true){
