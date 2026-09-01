@@ -5,7 +5,7 @@
 .compassWidget header button{width:24px;height:24px;border:1px solid #ffffff20;background:#ffffff12;color:#f7f4ea;font-size:17px}
 .compassDial{width:94px;height:94px;margin:9px auto 5px;border:3px solid #b89343;background:#eeeade;box-shadow:0 0 0 3px #06251e,0 4px 13px #0008,inset 0 0 0 2px #c8c0aa}
 .compassTicks{position:absolute;inset:4px;border-radius:50%;background:repeating-conic-gradient(from -1deg,#183f35 0 1deg,transparent 1deg 10deg);mask:radial-gradient(circle,transparent 0 77%,#000 78%);-webkit-mask:radial-gradient(circle,transparent 0 77%,#000 78%)}
-.compassRose{inset:8px;transition:transform .28s cubic-bezier(.2,.7,.25,1)}
+.compassRose{inset:8px;transition:transform .14s cubic-bezier(.2,.75,.3,1);will-change:transform}
 .compassRose b{color:#30473f;font-family:Georgia,serif;font-size:10px;font-weight:900}
 .compassRose .north{top:1px;color:#c3312d;font-size:12px}.compassRose .south{bottom:1px}.compassRose .east{right:2px}.compassRose .west{left:2px}
 .compassRose i{top:15px;border-left-width:6px;border-right-width:6px;border-bottom:26px solid #c52f2b;filter:drop-shadow(0 1px 1px #0005)}
