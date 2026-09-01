@@ -39,7 +39,7 @@ export default function CompassTools(){
   lastRawRef.current={value,at:now};
   const samples=samplesRef.current;samples.push(value);if(samples.length>24)samples.shift();
   if(samples.length<8){setCalibration('calibrating');return}
-  const recent=samples.slice(-10),displaySamples=samples.slice(-5),mean=circularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,spread,accurateIos);
+  const recent=samples.slice(-12),displaySamples=samples.slice(-9),mean=circularMean(displaySamples),spread=circularSpread(recent,circularMean(recent)),accurateIos=!ios||!Number.isFinite(accuracy)||accuracy<0||accuracy<=35,nextCalibration=nextCalibrationState(calibrationRef.current,spread,accurateIos);
   calibrationRef.current=nextCalibration;setCalibration(nextCalibration);
   if(now-lastPaintRef.current<100)return;
   lastPaintRef.current=now;
