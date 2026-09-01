@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {angleDifference,circularMean,circularSpread,normalizeHeading,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,circularMean,circularSpread,normalizeHeading,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -19,4 +19,12 @@ test('suaviza por el camino corto y limita los saltos visuales',()=>{
  assert.equal(next,1);
  assert.equal(angleDifference(4,next),3);
  assert.equal(smoothHeading(25,25.3,{deadband:.6}),25);
+});
+
+test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
+ assert.equal(adaptiveHeading(0,120),55);
+ assert.equal(adaptiveHeading(359,359.5),359);
+ const corrected=adaptiveHeading(350,20);
+ assert.ok(corrected>350||corrected<20);
+ assert.ok(Math.abs(angleDifference(20,corrected))<30);
 });
