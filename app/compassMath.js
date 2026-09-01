@@ -29,3 +29,12 @@ export function smoothHeading(current,target,{factor=.18,maxStep=3,deadband=.6}=
  const step=Math.max(-maxStep,Math.min(maxStep,delta*factor));
  return normalizeHeading(current+step);
 }
+
+export function adaptiveHeading(current,target){
+ if(current===null||!Number.isFinite(current))return normalizeHeading(target);
+ const distance=Math.abs(angleDifference(target,current));
+ if(distance>=75)return smoothHeading(current,target,{factor:.72,maxStep:55,deadband:0});
+ if(distance>=25)return smoothHeading(current,target,{factor:.52,maxStep:28,deadband:.15});
+ if(distance>=7)return smoothHeading(current,target,{factor:.34,maxStep:12,deadband:.35});
+ return smoothHeading(current,target,{factor:.2,maxStep:4,deadband:.8});
+}
