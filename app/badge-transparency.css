@@ -1,0 +1,8 @@
+.badgeRoadmap button,.badgeRoadmap .unlocked{background:transparent;border-color:transparent;box-shadow:none}
+.badgeRoadmap img{background:transparent;filter:drop-shadow(0 9px 8px rgba(0,0,0,.38)) drop-shadow(0 0 9px rgba(239,205,105,.22));animation:badgeRoadmapFloat 3.4s ease-in-out infinite;will-change:transform}
+.badgeRoadmap button:nth-child(3n+2) img{animation-delay:-1.1s}
+.badgeRoadmap button:nth-child(3n) img{animation-delay:-2.2s}
+.badgeRoadmap .locked img{filter:grayscale(1) drop-shadow(0 7px 7px rgba(0,0,0,.28));opacity:.3}
+.badgeFloat,.badgeFloat img,.mountainProgressHero>img,.levelBadge,.bottomLevelBadge img,.heroAvatar.badgeAvatar img{background:transparent}
+@keyframes badgeRoadmapFloat{0%,100%{transform:translateY(3px) rotate(-.7deg)}50%{transform:translateY(-5px) rotate(.7deg)}}
+@media(prefers-reduced-motion:reduce){.badgeRoadmap img{animation:none}}
