@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,headingSampleDecision,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -20,6 +20,17 @@ test('el promedio robusto descarta una lectura magnética aislada',()=>{
  assert.equal(COMPASS_TUNING.sensorFrequencyHz,20);
  assert.equal(COMPASS_TUNING.visualFrequencyHz,10);
  assert.equal(COMPASS_TUNING.deadbandDegrees,2);
+});
+
+test('el guardia magnético rechaza picos y confirma giros reales',()=>{
+ const spike=headingSampleDecision(10,75,50,null);
+ assert.equal(spike.accept,false);
+ assert.equal(spike.pending.value,75);
+ const confirmed=headingSampleDecision(10,78,100,spike.pending);
+ assert.equal(confirmed.accept,true);
+ assert.equal(confirmed.pending,null);
+ assert.equal(headingSampleDecision(10,22,50,null).accept,true);
+ assert.equal(headingSampleDecision(undefined,220,0,null).accept,true);
 });
 
 test('suaviza por el camino corto y limita los saltos visuales',()=>{
