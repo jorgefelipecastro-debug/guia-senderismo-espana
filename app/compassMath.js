@@ -48,6 +48,18 @@ export function headingSampleDecision(previous,candidate,elapsedMs,pending=null)
  return {accept:false,pending:{value:normalizeHeading(candidate)}};
 }
 
+export function isCoherentHeadingMotion(values,{minimumTurn=12,minimumCoherence=.72}={}){
+ if(!values||values.length<4)return false;
+ const deltas=[];
+ for(let index=1;index<values.length;index++){
+  const delta=angleDifference(values[index],values[index-1]);
+  if(Math.abs(delta)>=.7)deltas.push(delta);
+ }
+ if(deltas.length<3)return false;
+ const signed=deltas.reduce((sum,value)=>sum+value,0),travel=deltas.reduce((sum,value)=>sum+Math.abs(value),0);
+ return Math.abs(signed)>=minimumTurn&&travel>0&&Math.abs(signed)/travel>=minimumCoherence;
+}
+
 export function smoothHeading(current,target,{factor=.18,maxStep=3,deadband=.6}={}){
  if(current===null||!Number.isFinite(current))return normalizeHeading(target);
  const delta=angleDifference(target,current);
