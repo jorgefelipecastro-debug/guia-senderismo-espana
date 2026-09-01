@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,normalizeHeading,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,nextCalibrationState,normalizeHeading,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -24,9 +24,18 @@ test('suaviza por el camino corto y limita los saltos visuales',()=>{
 test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
  assert.equal(adaptiveHeading(0,120),90);
  assert.equal(adaptiveHeading(359,359.5),359);
+ assert.equal(adaptiveHeading(100,101.4),100);
+ assert.ok(adaptiveHeading(100,108)>103&&adaptiveHeading(100,108)<105);
  const corrected=adaptiveHeading(350,20);
  assert.ok(corrected>350||corrected<20);
  assert.ok(Math.abs(angleDifference(20,corrected))<8);
+});
+
+test('mantiene estable el estado ante ruido intermedio y recalibra solo si es alto',()=>{
+ assert.equal(nextCalibrationState('calibrating',9,true),'stable');
+ assert.equal(nextCalibrationState('stable',15,true),'stable');
+ assert.equal(nextCalibrationState('stable',19,true),'calibrating');
+ assert.equal(nextCalibrationState('stable',5,false),'calibrating');
 });
 
 test('convierte el cuaternión Android usando la parte superior del móvil',()=>{
