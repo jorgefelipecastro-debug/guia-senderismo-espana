@@ -34,9 +34,9 @@ export function adaptiveHeading(current,target){
  if(current===null||!Number.isFinite(current))return normalizeHeading(target);
  const distance=Math.abs(angleDifference(target,current));
  if(distance>=45)return smoothHeading(current,target,{factor:.9,maxStep:90,deadband:0});
- if(distance>=15)return smoothHeading(current,target,{factor:.75,maxStep:32,deadband:.2});
- if(distance>=6)return smoothHeading(current,target,{factor:.45,maxStep:8,deadband:.8});
- return smoothHeading(current,target,{factor:.22,maxStep:1.5,deadband:1.5});
+ if(distance>=18)return smoothHeading(current,target,{factor:.75,maxStep:28,deadband:.3});
+ if(distance>=8)return smoothHeading(current,target,{factor:.32,maxStep:5,deadband:1});
+ return smoothHeading(current,target,{factor:.14,maxStep:.8,deadband:2});
 }
 
 export function nextCalibrationState(current,spread,accurate=true){
