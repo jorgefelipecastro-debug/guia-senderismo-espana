@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,headingFromQuaternion,nextCalibrationState,normalizeHeading,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -12,6 +12,14 @@ test('promedia correctamente al cruzar de 359 a 0 grados',()=>{
  const mean=circularMean([358,359,0,1,2]);
  assert.ok(mean<1||mean>359);
  assert.ok(circularSpread([358,359,0,1,2],mean)<=3);
+});
+
+test('el promedio robusto descarta una lectura magnética aislada',()=>{
+ const mean=robustCircularMean([358,359,0,1,2,180]);
+ assert.ok(mean<2||mean>358);
+ assert.equal(COMPASS_TUNING.sensorFrequencyHz,20);
+ assert.equal(COMPASS_TUNING.visualFrequencyHz,10);
+ assert.equal(COMPASS_TUNING.deadbandDegrees,2);
 });
 
 test('suaviza por el camino corto y limita los saltos visuales',()=>{
