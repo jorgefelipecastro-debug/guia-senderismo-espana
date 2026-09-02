@@ -1,0 +1,7 @@
+.legalPage .legalBackProfile{
+  display:inline-flex;align-items:center;gap:7px;margin:0 0 22px;padding:11px 15px;
+  border:1px solid #bfd2c7;border-radius:999px;background:#edf5f0;color:#075d43;
+  box-shadow:0 5px 16px #173b2912;text-decoration:none;font-size:13px;font-weight:900;
+}
+.legalPage .legalBackProfile:focus-visible{outline:3px solid #d3a432;outline-offset:3px}
+.legalPage .legalBrand{display:block}
