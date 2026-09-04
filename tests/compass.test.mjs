@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromQuaternion,headingSampleDecision,isCoherentHeadingMotion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromDeviceOrientation,headingFromQuaternion,headingSampleDecision,isCoherentHeadingMotion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
  assert.equal(normalizeHeading(360),0);
@@ -73,9 +73,20 @@ test('convierte el cuaternión Android usando la parte superior del móvil',()=>
  assert.equal(headingFromQuaternion(null),null);
 });
 
-test('el sensor Android normal prevalece y el avanzado queda como respaldo',()=>{
- assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),false);
- assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),true);
+test('convierte alpha absoluto y compensa la orientación visible de pantalla',()=>{
+ assert.equal(headingFromDeviceOrientation(0,0),0);
+ assert.equal(headingFromDeviceOrientation(270,0),90);
+ assert.equal(headingFromDeviceOrientation(180,0),180);
+ assert.equal(headingFromDeviceOrientation(90,0),270);
+ assert.equal(headingFromDeviceOrientation(270,90),0);
+ assert.equal(headingFromDeviceOrientation(90,-90),0);
+ assert.equal(headingFromDeviceOrientation(NaN,0),null);
+});
+
+test('prioriza el sensor absoluto avanzado sin permitir que el legado lo sustituya',()=>{
+ assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),true);
+ assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),false);
+ assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Brújula iPhone'),true);
  assert.equal(shouldUseHeadingSource('','Sensor Android'),true);
  assert.equal(shouldUseHeadingSource('','Sensor Android avanzado'),true);
 });
