@@ -29,7 +29,7 @@ export default function CompassTools(){
   if(event.type==='deviceorientationabsolute')absoluteSeenRef.current=true;
   if(!absolute||(!ios&&event.type==='deviceorientation'&&absoluteSeenRef.current))return;
   const beta=Number(event.beta),gamma=Number(event.gamma);
-  if((Number.isFinite(beta)&&Math.abs(beta)>55)||(Number.isFinite(gamma)&&Math.abs(gamma)>55)){setCalibration('calibrating');setError('Coloca el móvil más plano para obtener un norte fiable.');return}
+  if((Number.isFinite(beta)&&Math.abs(beta)>55)||(Number.isFinite(gamma)&&Math.abs(gamma)>55)){setCalibration('calibrating');setError('Coloca el móvil más plano para obtener un norte fiable.')}else setError('');
   const raw=ios?event.webkitCompassHeading:Number.isFinite(event.alpha)?360-event.alpha+screenAngle():null;
   if(raw===null)return;
   consumeHeading(raw,{source:ios?'Brújula iPhone':'Sensor Android',ios,accuracy:Number(event.webkitCompassAccuracy)});
