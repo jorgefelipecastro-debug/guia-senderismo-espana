@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -16,7 +16,9 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./src/lib/supabase";
 import {
   beginNativeTracking,
-  flushPoints,
+  requestFinish,
+  resumeNativeTracking,
+  synchronizeTracking,
   stopNativeTracking,
 } from "./src/gps/backgroundLocation";
 import {
@@ -27,10 +29,12 @@ import {
 } from "./src/gps/storage";
 import {
   downloadRoute,
+  listOfflineRoutes,
   readOfflineRoute,
   type OfflineRoute,
 } from "./src/navigation/routeStorage";
 import NativeRouteMap from "./src/navigation/NativeRouteMap";
+import DownloadedMapsManager from "./src/navigation/DownloadedMapsManager";
 type Route = {
   id: string;
   name: string;
@@ -45,10 +49,10 @@ const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? "https://www.encumbrate.es";
 const routeReady = (route: Route) =>
   Boolean(
     route.id &&
-      route.name &&
-      Number.isFinite(route.distanceKm) &&
-      Number(route.distanceKm) > 0 &&
-      route.duration,
+    route.name &&
+    Number.isFinite(route.distanceKm) &&
+    Number(route.distanceKm) > 0 &&
+    route.duration,
   );
 export default function App() {
   const [auth, setAuth] = useState<Session | null>(null),
@@ -64,7 +68,15 @@ export default function App() {
     [pending, setPending] = useState(0),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
-    [pendingRoute, setPendingRoute] = useState<Route | null>(null);
+    [pendingRoute, setPendingRoute] = useState<Route | null>(null),
+    [downloaded, setDownloaded] = useState<OfflineRoute[]>([]),
+    [mapsOpen, setMapsOpen] = useState(false),
+    [viewOnly, setViewOnly] = useState(false);
+  const refreshDownloaded = useCallback(async () => {
+    const saved = await listOfflineRoutes();
+    setDownloaded(saved);
+    return saved;
+  }, []);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setAuth(data.session));
     const { data } = supabase.auth.onAuthStateChange((_event, session) =>
@@ -76,19 +88,37 @@ export default function App() {
     if (auth) {
       restore(auth.user.id);
       loadNearbyRoutes();
+      refreshDownloaded().catch(() => {});
     }
-  }, [auth]);
+  }, [auth, refreshDownloaded]);
+  useEffect(() => {
+    if (!auth || !active?.finishRequested) return;
+    const timer = setInterval(() => {
+      sync().catch(() => {});
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [auth, active?.finishRequested]);
   async function restore(userId = auth?.user.id) {
     const session = await readSession();
     if (session && userId && session.userId !== userId) {
-      setMessage("Hay una ruta activa de otra cuenta en este dispositivo. Vuelve a esa cuenta para recuperarla.");
+      setMessage(
+        "Hay una ruta activa de otra cuenta en este dispositivo. Vuelve a esa cuenta para recuperarla.",
+      );
       setActive(null);
       setTrack(null);
       return;
     }
     setActive(session);
     setPending((await readPending()).length);
-    if (session) setTrack(await readOfflineRoute(session.routeId));
+    if (session) {
+      setTrack(await readOfflineRoute(session.routeId));
+      if (!session.finishRequested)
+        await resumeNativeTracking().catch(() =>
+          setMessage(
+            "Activa el permiso de ubicación para recuperar el seguimiento.",
+          ),
+        );
+    }
   }
   async function login() {
     if (!email.trim() || !password) {
@@ -100,20 +130,32 @@ export default function App() {
       return;
     }
     if (authMode === "register" && !acceptedTerms) {
-      setMessage("Debes aceptar los términos, las normas y la política de privacidad.");
+      setMessage(
+        "Debes aceptar los términos, las normas y la política de privacidad.",
+      );
       return;
     }
     setBusy(true);
     setMessage("");
     const normalizedEmail = email.trim().toLowerCase();
-    const { error } = authMode === "register"
-      ? await supabase.auth.signUp({ email: normalizedEmail, password })
-      : await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+    const { error } =
+      authMode === "register"
+        ? await supabase.auth.signUp({ email: normalizedEmail, password })
+        : await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password,
+          });
     setBusy(false);
     if (error) {
-      setMessage(authMode === "register" ? error.message : "Correo o contraseña incorrectos, o el correo no está confirmado.");
+      setMessage(
+        authMode === "register"
+          ? error.message
+          : "Correo o contraseña incorrectos, o el correo no está confirmado.",
+      );
     } else if (authMode === "register") {
-      setMessage("Cuenta creada. Revisa tu correo, confirma la dirección y después inicia sesión.");
+      setMessage(
+        "Cuenta creada. Revisa tu correo, confirma la dirección y después inicia sesión.",
+      );
       setAuthMode("login");
     }
   }
@@ -121,11 +163,18 @@ export default function App() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) return setMessage("Escribe primero tu correo.");
     setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${WEB_URL}/?recovery=1`,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      normalizedEmail,
+      {
+        redirectTo: `${WEB_URL}/?recovery=1`,
+      },
+    );
     setBusy(false);
-    setMessage(error ? "No se ha podido enviar el correo de recuperación." : "Revisa tu correo para crear una contraseña nueva.");
+    setMessage(
+      error
+        ? "No se ha podido enviar el correo de recuperación."
+        : "Revisa tu correo para crear una contraseña nueva.",
+    );
   }
   async function loadNearbyRoutes() {
     try {
@@ -144,7 +193,13 @@ export default function App() {
         body = await response.json();
       setRoutes((body.routes ?? []).filter(routeReady));
     } catch {
-      setMessage("No hemos podido cargar las rutas cercanas.");
+      const downloaded = await listOfflineRoutes();
+      setRoutes(downloaded);
+      setMessage(
+        downloaded.length
+          ? "Sin conexión: mostrando tus rutas descargadas."
+          : "No hemos podido cargar las rutas cercanas.",
+      );
     }
   }
   async function start(route: Route) {
@@ -152,11 +207,14 @@ export default function App() {
     setBusy(true);
     setMessage("Descargando el trazado…");
     try {
-      const saved = await downloadRoute(WEB_URL, route, (percentage) =>
-        setMessage(`Descargando mapa offline… ${Math.round(percentage)} %`),
-      );
+      const saved =
+        (await readOfflineRoute(route.id)) ??
+        (await downloadRoute(WEB_URL, route, (percentage) =>
+          setMessage(`Descargando mapa offline… ${Math.round(percentage)} %`),
+        ));
+      await refreshDownloaded();
       setTrack(saved);
-      const session = await beginNativeTracking(route);
+      const session = await beginNativeTracking(route, auth!.user.id);
       setActive(session);
       setGuide(true);
       setMessage("Ruta descargada y seguimiento permanente activado.");
@@ -192,7 +250,15 @@ export default function App() {
   }
   async function sync() {
     setBusy(true);
-    await flushPoints();
+    const completed = await synchronizeTracking();
+    if (completed) {
+      await clearTrackingStorage();
+      setActive(null);
+      setTrack(null);
+      setGuide(false);
+      setLost(false);
+      setMessage("Ruta sincronizada y guardada.");
+    }
     await restore();
     setBusy(false);
   }
@@ -201,21 +267,22 @@ export default function App() {
     setBusy(true);
     try {
       await stopNativeTracking();
-      if ((await readPending()).length)
-        throw new Error(
-          "Aún hay puntos sin cobertura. Sincronízalos antes de finalizar.",
-        );
-      const { error } = await supabase.rpc("finalize_external_route_activity", {
-        p_activity_id: active.id,
-      });
-      if (error) throw error;
-      await clearTrackingStorage();
-      setActive(null);
-      setTrack(null);
       setGuide(false);
       setLost(false);
-      setPending(0);
-      setMessage("Ruta finalizada y guardada.");
+      await requestFinish();
+      const completed = await synchronizeTracking();
+      if (completed) {
+        await clearTrackingStorage();
+        setActive(null);
+        setTrack(null);
+        setPending(0);
+        setMessage("Ruta finalizada y guardada.");
+      } else {
+        await restore();
+        setMessage(
+          "Ruta finalizada en el móvil. Se guardará automáticamente cuando vuelva la conexión.",
+        );
+      }
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se ha podido finalizar.",
@@ -234,8 +301,22 @@ export default function App() {
             Tu guía continúa con la pantalla apagada
           </Text>
           <View style={styles.authTabs}>
-            <Pressable style={authMode === "login" ? styles.authTabActive : styles.authTab} onPress={() => setAuthMode("login")}><Text>Entrar</Text></Pressable>
-            <Pressable style={authMode === "register" ? styles.authTabActive : styles.authTab} onPress={() => setAuthMode("register")}><Text>Crear cuenta</Text></Pressable>
+            <Pressable
+              style={
+                authMode === "login" ? styles.authTabActive : styles.authTab
+              }
+              onPress={() => setAuthMode("login")}
+            >
+              <Text>Entrar</Text>
+            </Pressable>
+            <Pressable
+              style={
+                authMode === "register" ? styles.authTabActive : styles.authTab
+              }
+              onPress={() => setAuthMode("register")}
+            >
+              <Text>Crear cuenta</Text>
+            </Pressable>
           </View>
           <TextInput
             style={styles.input}
@@ -253,20 +334,52 @@ export default function App() {
             placeholder="Contraseña"
           />
           <Pressable style={styles.primary} onPress={login} disabled={busy}>
-            <Text>{busy ? "Procesando…" : authMode === "register" ? "Crear cuenta" : "Entrar"}</Text>
+            <Text>
+              {busy
+                ? "Procesando…"
+                : authMode === "register"
+                  ? "Crear cuenta"
+                  : "Entrar"}
+            </Text>
           </Pressable>
-          {authMode === "login" && <Pressable onPress={recoverPassword} disabled={busy}><Text style={styles.link}>¿Has olvidado tu contraseña?</Text></Pressable>}
-          {authMode === "register" && <>
-            <Pressable style={styles.consent} onPress={() => setAcceptedTerms((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: acceptedTerms }}>
-              <Text style={styles.checkbox}>{acceptedTerms ? "☑" : "☐"}</Text>
-              <Text style={styles.legal}>Acepto los términos, las normas de la comunidad y la política de privacidad.</Text>
+          {authMode === "login" && (
+            <Pressable onPress={recoverPassword} disabled={busy}>
+              <Text style={styles.link}>¿Has olvidado tu contraseña?</Text>
             </Pressable>
-            <View style={styles.legalLinks}>
-              <Pressable onPress={() => Linking.openURL(`${WEB_URL}/terminos`)}><Text style={styles.link}>Términos</Text></Pressable>
-              <Pressable onPress={() => Linking.openURL(`${WEB_URL}/normas-comunidad`)}><Text style={styles.link}>Normas</Text></Pressable>
-              <Pressable onPress={() => Linking.openURL(`${WEB_URL}/privacidad`)}><Text style={styles.link}>Privacidad</Text></Pressable>
-            </View>
-          </>}
+          )}
+          {authMode === "register" && (
+            <>
+              <Pressable
+                style={styles.consent}
+                onPress={() => setAcceptedTerms((value) => !value)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: acceptedTerms }}
+              >
+                <Text style={styles.checkbox}>{acceptedTerms ? "☑" : "☐"}</Text>
+                <Text style={styles.legal}>
+                  Acepto los términos, las normas de la comunidad y la política
+                  de privacidad.
+                </Text>
+              </Pressable>
+              <View style={styles.legalLinks}>
+                <Pressable
+                  onPress={() => Linking.openURL(`${WEB_URL}/terminos`)}
+                >
+                  <Text style={styles.link}>Términos</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => Linking.openURL(`${WEB_URL}/normas-comunidad`)}
+                >
+                  <Text style={styles.link}>Normas</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => Linking.openURL(`${WEB_URL}/privacidad`)}
+                >
+                  <Text style={styles.link}>Privacidad</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
           {message && <Text style={styles.message}>{message}</Text>}
         </View>
       </SafeAreaView>
@@ -281,10 +394,33 @@ export default function App() {
           onBack={() => {
             setGuide(false);
             setLost(false);
+            if (viewOnly && active)
+              readOfflineRoute(active.routeId)
+                .then(setTrack)
+                .catch(() => {});
+            setViewOnly(false);
           }}
           onLost={() => setLost(true)}
           onRecovered={() => setLost(false)}
           onFinish={finish}
+          viewOnly={viewOnly}
+        />
+      </SafeAreaView>
+    );
+  if (mapsOpen)
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="light" />
+        <DownloadedMapsManager
+          webUrl={WEB_URL}
+          activeRouteId={active?.routeId}
+          onBack={() => setMapsOpen(false)}
+          onChanged={setDownloaded}
+          onOpen={(route) => {
+            setTrack(route);
+            setViewOnly(true);
+            setGuide(true);
+          }}
         />
       </SafeAreaView>
     );
@@ -294,40 +430,61 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.page}>
         <Text style={styles.brand}>ENCÚMBRATE</Text>
         <Text style={styles.title}>Seguimiento GPS nativo</Text>
-        <Pressable onPress={logout}><Text style={styles.logout}>Cerrar sesión</Text></Pressable>
+        <Pressable onPress={logout}>
+          <Text style={styles.logout}>Cerrar sesión</Text>
+        </Pressable>
+        <Pressable style={styles.mapManager} onPress={() => setMapsOpen(true)}>
+          <View>
+            <Text style={styles.mapManagerTitle}>Mapas descargados</Text>
+            <Text style={styles.mapManagerDetail}>
+              {downloaded.length} disponibles sin conexión
+            </Text>
+          </View>
+          <Text style={styles.mapManagerArrow}>›</Text>
+        </Pressable>
         {active ? (
           <View style={styles.active}>
-            <Text style={styles.live}>● RUTA EN MARCHA</Text>
+            <Text style={styles.live}>
+              {active.finishRequested
+                ? "✓ RUTA FINALIZADA EN EL MÓVIL"
+                : "● RUTA EN MARCHA"}
+            </Text>
             <Text style={styles.routeName}>{active.routeName}</Text>
             <Text style={styles.detail}>
-              La posición continúa registrándose con la pantalla apagada.
+              {active.finishRequested
+                ? "Pendiente de sincronizar cuando vuelva la cobertura."
+                : "La posición continúa registrándose con la pantalla apagada."}
             </Text>
             <Text style={styles.pending}>
               {pending
                 ? `${pending} puntos esperando conexión`
                 : "Todos los puntos sincronizados"}
             </Text>
-            {track && (
+            {track && !active.finishRequested && (
               <Pressable style={styles.primary} onPress={() => setGuide(true)}>
                 <Text>Abrir mapa y guía</Text>
               </Pressable>
             )}
-            <Pressable
-              style={styles.lost}
-              onPress={() => {
-                setLost(true);
-                setGuide(true);
-              }}
-              disabled={!track}
-            >
-              <Text>⚠ Estoy perdido</Text>
-            </Pressable>
+            {!active.finishRequested && (
+              <Pressable
+                style={styles.lost}
+                onPress={() => {
+                  setLost(true);
+                  setGuide(true);
+                }}
+                disabled={!track}
+              >
+                <Text>⚠ Estoy perdido</Text>
+              </Pressable>
+            )}
             <Pressable style={styles.primary} onPress={sync} disabled={busy}>
               <Text>Sincronizar ahora</Text>
             </Pressable>
-            <Pressable style={styles.danger} onPress={finish} disabled={busy}>
-              <Text style={styles.white}>Finalizar y guardar</Text>
-            </Pressable>
+            {!active.finishRequested && (
+              <Pressable style={styles.danger} onPress={finish} disabled={busy}>
+                <Text style={styles.white}>Finalizar y guardar</Text>
+              </Pressable>
+            )}
           </View>
         ) : (
           <>
@@ -364,12 +521,28 @@ export default function App() {
         )}
         {busy && <ActivityIndicator color="#d6aa45" size="large" />}
         {message && <Text style={styles.message}>{message}</Text>}
-        {pendingRoute && <View style={styles.disclosure}>
-          <Text style={styles.disclosureTitle}>Ubicación durante la ruta</Text>
-          <Text style={styles.detail}>Encúmbrate descargará este mapa y registrará tu GPS incluso con la pantalla apagada para conservar tu recorrido, sincronizarlo al recuperar cobertura y ayudarte a volver al sendero. No se usa con publicidad. Puedes retirar “Permitir siempre” en Ajustes.</Text>
-          <Pressable style={styles.primary} onPress={() => start(pendingRoute)}><Text>Entendido, continuar</Text></Pressable>
-          <Pressable onPress={() => setPendingRoute(null)}><Text style={styles.link}>Cancelar</Text></Pressable>
-        </View>}
+        {pendingRoute && (
+          <View style={styles.disclosure}>
+            <Text style={styles.disclosureTitle}>
+              Ubicación durante la ruta
+            </Text>
+            <Text style={styles.detail}>
+              Encúmbrate descargará este mapa y registrará tu GPS incluso con la
+              pantalla apagada para conservar tu recorrido, sincronizarlo al
+              recuperar cobertura y ayudarte a volver al sendero. No se usa con
+              publicidad. Puedes retirar “Permitir siempre” en Ajustes.
+            </Text>
+            <Pressable
+              style={styles.primary}
+              onPress={() => start(pendingRoute)}
+            >
+              <Text>Entendido, continuar</Text>
+            </Pressable>
+            <Pressable onPress={() => setPendingRoute(null)}>
+              <Text style={styles.link}>Cancelar</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -379,8 +552,20 @@ const styles = StyleSheet.create({
   page: { padding: 20, paddingBottom: 50, gap: 14 },
   login: { flex: 1, padding: 24, justifyContent: "center", gap: 14 },
   authTabs: { flexDirection: "row", gap: 8 },
-  authTab: { flex: 1, padding: 12, alignItems: "center", backgroundColor: "#dce8df", borderRadius: 12 },
-  authTabActive: { flex: 1, padding: 12, alignItems: "center", backgroundColor: "#e4b84f", borderRadius: 12 },
+  authTab: {
+    flex: 1,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#dce8df",
+    borderRadius: 12,
+  },
+  authTabActive: {
+    flex: 1,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#e4b84f",
+    borderRadius: 12,
+  },
   brand: {
     color: "#e5bd58",
     fontSize: 16,
@@ -414,14 +599,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   message: { color: "#fff", textAlign: "center", lineHeight: 21 },
-  link: { color: "#e5bd58", fontWeight: "800", textAlign: "center", padding: 6 },
+  link: {
+    color: "#e5bd58",
+    fontWeight: "800",
+    textAlign: "center",
+    padding: 6,
+  },
   legal: { color: "#dcece5", fontSize: 12, lineHeight: 17 },
   consent: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   checkbox: { color: "#e5bd58", fontSize: 22, lineHeight: 24 },
   legalLinks: { flexDirection: "row", justifyContent: "center", gap: 8 },
-  logout: { color: "#fff", textDecorationLine: "underline", alignSelf: "flex-end" },
-  disclosure: { backgroundColor: "#fff", borderRadius: 20, padding: 18, gap: 12 },
+  logout: {
+    color: "#fff",
+    textDecorationLine: "underline",
+    alignSelf: "flex-end",
+  },
+  disclosure: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 18,
+    gap: 12,
+  },
   disclosureTitle: { color: "#083f2e", fontSize: 20, fontWeight: "900" },
+  mapManager: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mapManagerTitle: { color: "#083f2e", fontWeight: "900", fontSize: 15 },
+  mapManagerDetail: { color: "#657970", fontSize: 10, marginTop: 3 },
+  mapManagerArrow: { color: "#0a6748", fontSize: 31, lineHeight: 32 },
   active: {
     backgroundColor: "#f7fbf8",
     borderRadius: 24,

@@ -1,6 +1,6 @@
 .profileBadgeStage{
   position:relative;z-index:1;display:grid;place-items:center;
-  flex:0 0 112px;width:112px;height:126px;isolation:isolate;
+  flex:0 0 120px;width:120px;height:132px;isolation:isolate;
 }
 .profileBadgeLight{
   position:absolute;inset:4px -7px -4px;z-index:-1;border-radius:50%;
@@ -12,7 +12,7 @@
 .profileBadgeLight i:nth-child(2){transform:rotate(60deg)}
 .profileBadgeLight i:nth-child(3){transform:rotate(120deg)}
 .profileBadge{
-  position:relative;width:108px!important;height:108px;object-fit:contain;background:transparent;
+  position:relative;width:116px!important;height:116px;object-fit:contain;background:transparent;
   filter:drop-shadow(0 15px 13px #001c1690) drop-shadow(0 0 13px #f8d66b99);
   animation:profileBadgeFloat 3.2s ease-in-out infinite;will-change:transform;
 }
@@ -30,16 +30,16 @@
 @keyframes profileNextFloat{0%,100%{transform:translateY(2px)}50%{transform:translateY(-4px)}}
 @media(max-width:430px){
   .profileHero{gap:10px;padding-left:14px;padding-right:12px}
-  .profileBadgeStage{flex-basis:94px;width:94px;height:112px}
-  .profileBadge{width:92px!important;height:92px}
+  .profileBadgeStage{flex-basis:100px;width:100px;height:116px}
+  .profileBadge{width:96px!important;height:96px}
   .profileBadgeLight{inset:9px -4px 5px}
   .profileIdentity h1{font-size:21px}
   .profileAvatar{width:76px;height:76px}
   .profileNextBadge{width:56px;height:56px}
 }
 @media(max-width:360px){
-  .profileBadgeStage{flex-basis:78px;width:78px}
-  .profileBadge{width:76px!important;height:76px}
+  .profileBadgeStage{flex-basis:100px;width:100px}
+  .profileBadge{width:96px!important;height:96px}
   .profileAvatar{width:68px;height:68px}
   .profileIdentity h1{font-size:18px}
   .profileIdentity p{font-size:10px}

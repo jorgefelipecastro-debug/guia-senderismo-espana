@@ -13,6 +13,14 @@ export function normalizeHeading(value){
  return ((value%360)+360)%360;
 }
 
+export function headingFromDeviceOrientation(alpha,screenAngle=0){
+ if(!Number.isFinite(alpha))return null;
+ // DeviceOrientation usa los ejes naturales del dispositivo (retrato) y alpha
+ // gira en sentido contrario a un rumbo. La orientación de pantalla se resta
+ // para que el índice superior siga representando la parte alta visible.
+ return normalizeHeading(360-alpha-(Number(screenAngle)||0));
+}
+
 export function angleDifference(target,current){
  return ((target-current+540)%360)-180;
 }
@@ -85,10 +93,8 @@ export function nextCalibrationState(current,spread,accurate=true){
 
 export function shouldUseHeadingSource(currentSource,nextSource){
  if(!currentSource||currentSource===nextSource)return true;
- // DeviceOrientation absoluto es la lectura ya compensada por Android y debe
- // prevalecer. El Generic Sensor queda como respaldo para navegadores que no
- // entregan esa lectura; mezclar ambos provoca saltos y bloqueos aparentes.
- return nextSource!=='Sensor Android avanzado';
+ const priority={'Sensor Android':1,'Sensor Android avanzado':2,'Brújula iPhone':3};
+ return (priority[nextSource]||0)>(priority[currentSource]||0);
 }
 
 export function calibrationWarning(dismissed,{ios=false,accuracy=NaN,spread=0}={}){

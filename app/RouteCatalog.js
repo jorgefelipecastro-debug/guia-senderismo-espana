@@ -1,118 +1,2068 @@
-'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import LiveRouteGuide from './LiveRouteGuide';
-import RecoveryRouteMap from './RecoveryRouteMap';
-import Meetups from './Meetups';
-import RouteSubmission from './RouteSubmission';
-import RouteSubmissionGuide from './RouteSubmissionGuide';
-import CompassTools from './CompassTools';
-import './route-completion.css';
-import './offline-session-recovery.css';
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "../lib/supabase";
+import LiveRouteGuide from "./LiveRouteGuide";
+import RecoveryRouteMap from "./RecoveryRouteMap";
+import Meetups from "./Meetups";
+import RouteSubmission from "./RouteSubmission";
+import RouteSubmissionGuide from "./RouteSubmissionGuide";
+import CompassTools from "./CompassTools";
+import {
+  bearingDegrees,
+  nearestPolylinePoint,
+} from "../lib/navigation-geometry";
+import {
+  appendGpsPoint,
+  clearGpsSession,
+  markPendingGpsPointsSent,
+  readGpsSession,
+  requestPersistentGpsStorage,
+  writeGpsSession,
+} from "../lib/gps-indexed-db";
+import "./route-completion.css";
+import "./offline-session-recovery.css";
 
-const FALLBACK_POSITION={lat:38.3452,lon:-0.4815};
-const ROUTE_DATA_VERSION='2026-08-26-national-catalog-v1';
-const LEVEL_LABELS={principiante:'Principiante',intermedio:'Intermedio',experto:'Experto'};
-const TERRITORIES={
- 'Andalucía':['Almería','Cádiz','Córdoba','Granada','Huelva','Jaén','Málaga','Sevilla'],
- 'Aragón':['Huesca','Teruel','Zaragoza'],'Principado de Asturias':['Asturias'],'Illes Balears':['Illes Balears'],
- 'Canarias':['Las Palmas','Santa Cruz de Tenerife'],'Cantabria':['Cantabria'],
- 'Castilla-La Mancha':['Albacete','Ciudad Real','Cuenca','Guadalajara','Toledo'],
- 'Castilla y León':['Ávila','Burgos','León','Palencia','Salamanca','Segovia','Soria','Valladolid','Zamora'],
- 'Cataluña':['Barcelona','Girona','Lleida','Tarragona'],'Comunidad Valenciana':['Alicante','Castellón','Valencia'],
- 'Extremadura':['Badajoz','Cáceres'],'Galicia':['A Coruña','Lugo','Ourense','Pontevedra'],'La Rioja':['La Rioja'],
- 'Comunidad de Madrid':['Madrid'],'Región de Murcia':['Murcia'],'Comunidad Foral de Navarra':['Navarra'],
- 'País Vasco':['Álava','Bizkaia','Gipuzkoa'],'Ceuta':['Ceuta'],'Melilla':['Melilla']
+const FALLBACK_POSITION = { lat: 38.3452, lon: -0.4815 };
+const ROUTE_DATA_VERSION = "2026-08-26-national-catalog-v1";
+const LEVEL_LABELS = {
+  principiante: "Principiante",
+  intermedio: "Intermedio",
+  experto: "Experto",
 };
-const levelClass=level=>`routeLevel routeLevel-${level}`;
-const value=(number,suffix)=>Number.isFinite(number)?`${number.toLocaleString('es-ES',{maximumFractionDigits:1})}${suffix}`:'No publicado';
-function haversine(a,b){const rad=v=>v*Math.PI/180,dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon),x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
-const OFFLINE_ROUTE_KEY='encumbrate:offline-route';
-function readOfflineRoute(routeId){try{const saved=JSON.parse(localStorage.getItem(OFFLINE_ROUTE_KEY)||'null');return saved?.id===routeId&&Array.isArray(saved.points)&&saved.points.length>1?saved:null}catch{return null}}
-async function downloadOfflineRoute(route){const response=await fetch(`/api/routes/track?id=${encodeURIComponent(route.id)}`,{cache:'no-store'}),body=await response.json();if(!response.ok||!Array.isArray(body.points)||body.points.length<2)throw new Error(body.error||'No se ha podido descargar el trazado.');const saved={id:route.id,name:route.name,points:body.points,source:body.source,distanceKm:body.distanceKm,savedAt:new Date().toISOString()};localStorage.setItem(OFFLINE_ROUTE_KEY,JSON.stringify(saved));window.dispatchEvent(new CustomEvent('encumbrate:route-offline',{detail:saved}));return saved}
-function bearing(a,b){const rad=value=>value*Math.PI/180,deg=value=>(value*180/Math.PI+360)%360,dLon=rad(b.lon-a.lon),lat1=rad(a.lat),lat2=rad(b.lat);return deg(Math.atan2(Math.sin(dLon)*Math.cos(lat2),Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon)))}
-function compass(value){return['N','NE','E','SE','S','SO','O','NO'][Math.round(value/45)%8]}
-function nearestRoutePoint(position,points){let nearest=null,distance=Infinity;for(const point of points){const next=haversine(position,point);if(next<distance){distance=next;nearest=point}}return{point:nearest,distanceKm:distance,bearing:bearing(position,nearest)}}
-
-const routePhotoCache=new Map(),routeProfileCache=new Map();
-function useRoutePhoto(route,enabled=true){const initialItem={src:route.image||'',specific:Boolean(route.imageIsSpecific),trace:false,sourceUrl:route.imageSourceUrl||route.sourceUrl,credit:route.imageAttribution||'',license:route.imageLicense||''},initial={...initialItem,gallery:route.imageIsSpecific?[initialItem,...(route.imageGallery||[])]:[]};const[photo,setPhoto]=useState(()=>routePhotoCache.get(route.id)||initial);useEffect(()=>{let active=true;if(!enabled||route.imageIsSpecific)return()=>{active=false};const cached=routePhotoCache.get(route.id);if(cached){setPhoto(cached);return()=>{active=false}}const params=new URLSearchParams({id:route.id,name:route.name,ref:route.ref||'',wikipedia:route.wikipedia||'',wikidata:route.wikidata||'',category:route.commonsCategory||'',lat:String(route.lat),lon:String(route.lon)});fetch(`/api/routes/image?${params}`).then(response=>response.json()).then(data=>{const gallery=(data.gallery||[]).map(item=>({...item,specific:true}));const trace={src:`/api/routes/trace?id=${encodeURIComponent(route.id)}`,specific:false,trace:true,sourceUrl:route.sourceUrl,credit:'Trazado público de OpenStreetMap',license:'© OpenStreetMap contributors',gallery:[]};const resolved=data.found?{src:data.src,specific:true,trace:false,sourceUrl:data.sourceUrl,credit:data.credit,license:data.license,gallery}:trace;routePhotoCache.set(route.id,resolved);if(active)setPhoto(resolved)}).catch(()=>{const trace={src:`/api/routes/trace?id=${encodeURIComponent(route.id)}`,specific:false,trace:true,sourceUrl:route.sourceUrl,credit:'Trazado público de OpenStreetMap',license:'© OpenStreetMap contributors',gallery:[]};routePhotoCache.set(route.id,trace);if(active)setPhoto(trace)});return()=>{active=false}},[route.id,route.imageIsSpecific,enabled]);return photo}
-function useRouteProfile(route,enabled=true){const complete=Number.isFinite(route.distanceKm)&&Number.isFinite(route.ascentM)&&Number.isFinite(route.maxAltitudeM)&&Number.isFinite(route.minAltitudeM)&&Boolean(route.duration);const[profile,setProfile]=useState(()=>routeProfileCache.get(route.id)||null);useEffect(()=>{let active=true;if(!enabled||complete||routeProfileCache.has(route.id))return()=>{active=false};fetch(`/api/routes/profile?id=${encodeURIComponent(route.id)}`).then(response=>response.json()).then(data=>{if(!data.found)return;routeProfileCache.set(route.id,data);if(active)setProfile(data)}).catch(()=>{});return()=>{active=false}},[route.id,enabled,complete]);return profile}
-function enrichedRoute(route,profile){if(!profile)return route;return{...route,distanceKm:route.distanceKm??profile.distanceKm,ascentM:route.ascentM??profile.ascentM,maxAltitudeM:route.maxAltitudeM??profile.maxAltitudeM,minAltitudeM:route.minAltitudeM??profile.minAltitudeM,duration:route.duration||profile.duration,metricsSource:route.metricsSource||profile.source}}
-
-export default function RouteCatalog(){
- const[routes,setRoutes]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[catalogOpen,setCatalogOpen]=useState(false),[selected,setSelected]=useState(null),[query,setQuery]=useState(''),[placeQuery,setPlaceQuery]=useState(''),[catalogLabel,setCatalogLabel]=useState(''),[placeLoading,setPlaceLoading]=useState(false),[placeError,setPlaceError]=useState(''),[level,setLevel]=useState('todas'),[usingLocation,setUsingLocation]=useState(false),[completed,setCompleted]=useState({}),[historyOpen,setHistoryOpen]=useState(false),[nextCursor,setNextCursor]=useState(null),[catalogTotal,setCatalogTotal]=useState(0),[activeSearch,setActiveSearch]=useState(null),[moreLoading,setMoreLoading]=useState(false);
- useEffect(()=>{let active=true;const load=position=>{const params=new URLSearchParams({lat:String(position.lat),lon:String(position.lon),radius:'20000',limit:'200',v:ROUTE_DATA_VERSION});fetch(`/api/routes?${params}`,{cache:'no-store'}).then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||'No se ha podido cargar el catálogo.');if(active){setRoutes(body.routes||[]);setNextCursor(body.nextCursor||null);setCatalogTotal(body.total||body.routes?.length||0);setActiveSearch({lat:String(position.lat),lon:String(position.lon),radius:'20000'});setLoading(false)}}).catch(err=>{if(active){setError(err.message);setLoading(false)}})};if(!navigator.geolocation)return load(FALLBACK_POSITION);navigator.geolocation.getCurrentPosition(({coords})=>{setUsingLocation(true);load({lat:coords.latitude,lon:coords.longitude})},()=>load(FALLBACK_POSITION),{enableHighAccuracy:false,timeout:7000,maximumAge:300000});return()=>{active=false}},[]);
- useEffect(()=>{const open=()=>setCatalogOpen(true),history=()=>setHistoryOpen(true);window.addEventListener('encumbrate:open-routes',open);window.addEventListener('encumbrate:open-route-history',history);return()=>{window.removeEventListener('encumbrate:open-routes',open);window.removeEventListener('encumbrate:open-route-history',history)}},[]);
- useEffect(()=>{loadCompleted()},[]);
- async function loadCompleted(){const{data:{user}}=await supabase.auth.getUser();if(!user)return;const{data}=await supabase.from('route_activities').select('id,external_route_key,route_name,route_difficulty,status,distance_km,duration_seconds,trophy_earned,ended_at').eq('user_id',user.id).order('started_at',{ascending:false});const map={};for(const activity of data||[])if(activity.external_route_key&&!map[activity.external_route_key])map[activity.external_route_key]=activity;setCompleted(map)}
- async function loadPlace(place,scope='place'){const clean=place.trim();if(!clean)return setPlaceError('Escribe una localidad o elige una provincia.');setPlaceLoading(true);setPlaceError('');try{const search={place:clean,radius:'20000',scope,limit:'200'};const params=new URLSearchParams({...search,v:ROUTE_DATA_VERSION});const response=await fetch(`/api/routes?${params}`,{cache:'no-store'});const body=await response.json();if(!response.ok)throw new Error(body.error||'No se ha podido buscar esa zona.');setRoutes(body.routes||[]);setNextCursor(body.nextCursor||null);setCatalogTotal(body.total||body.routes?.length||0);setActiveSearch(search);setCatalogLabel(body.searchLabel||clean);setUsingLocation(false);setQuery('');if(!(body.routes||[]).length)setPlaceError('No hay rutas públicas catalogadas cerca de esa zona.')}catch(error){setPlaceError(error.message||'No se ha podido buscar esa zona.')}finally{setPlaceLoading(false)}}
- async function loadMore(){if(!nextCursor||!activeSearch||moreLoading)return;setMoreLoading(true);try{const params=new URLSearchParams({...activeSearch,cursor:nextCursor,v:ROUTE_DATA_VERSION});const response=await fetch(`/api/routes?${params}`,{cache:'no-store'}),body=await response.json();if(!response.ok)throw new Error(body.error||'No se han podido cargar más rutas.');setRoutes(current=>[...current,...(body.routes||[]).filter(route=>!current.some(item=>item.id===route.id))]);setNextCursor(body.nextCursor||null);setCatalogTotal(body.total||catalogTotal)}catch(error){setPlaceError(error.message||'No se han podido cargar más rutas.')}finally{setMoreLoading(false)}}
- async function searchPlace(event){event?.preventDefault();await loadPlace(placeQuery)}
- const filtered=useMemo(()=>routes.filter(route=>(level==='todas'||route.level===level)&&(!query.trim()||`${route.name} ${route.ref}`.toLocaleLowerCase('es').includes(query.trim().toLocaleLowerCase('es')))),[routes,query,level]);
- const nearest=routes.slice(0,3);
- return <>
-  <RouteSubmission/>
-  <RouteSubmissionGuide/>
-  <CompassTools/>
-  <button className="cSearch routeSearchTrigger" onClick={()=>setCatalogOpen(true)} aria-label="Buscar entre todas las rutas"><span className="searchIcon">⌕</span><span>Buscar rutas por nombre…</span><b>☷</b></button>
-  <button className="proposeRouteButton" onClick={()=>window.dispatchEvent(new CustomEvent('encumbrate:propose-route'))}>＋ Proponer una ruta que no aparece</button>
-  <div className="sectionTitle"><div><h2>{catalogLabel?`Rutas cerca de ${catalogLabel.split(',')[0]}`:'Rutas cerca de ti'}</h2><small>{catalogLabel?'Zona elegida en el buscador':usingLocation?'Ordenadas desde tu ubicación':'Mostrando Alicante como ubicación inicial'}</small></div><button onClick={()=>setCatalogOpen(true)}>Ver todas</button></div>
-  {loading?<div className="routesState"><i/>Buscando rutas públicas cercanas…</div>:error?<div className="routesState routesError">{error}</div>:nearest.length?<div className="nearbyRoutes">{nearest.map(route=><RouteCard key={route.id} route={route} activity={completed[route.id]} onClick={shown=>setSelected(shown)}/>)}</div>:<div className="routesState">No hay rutas públicas catalogadas en este radio.</div>}
-  {catalogOpen&&<RouteDirectory routes={filtered} completed={completed} query={query} setQuery={setQuery} placeQuery={placeQuery} setPlaceQuery={setPlaceQuery} searchPlace={searchPlace} loadPlace={loadPlace} loadMore={loadMore} nextCursor={nextCursor} moreLoading={moreLoading} catalogTotal={catalogTotal} placeLoading={placeLoading} placeError={placeError} catalogLabel={catalogLabel} level={level} setLevel={setLevel} close={()=>setCatalogOpen(false)} history={()=>{setCatalogOpen(false);setHistoryOpen(true)}} select={route=>{setCatalogOpen(false);setSelected(route)}}/>}
-  {historyOpen&&<RouteHistory activities={Object.values(completed)} close={()=>setHistoryOpen(false)}/>}
-  <Meetups/>
-  {selected&&<button className="routeMeetupFab" onClick={()=>window.dispatchEvent(new CustomEvent('encumbrate:create-meetup',{detail:selected}))}>♧ Crear quedada</button>}
-  {selected&&<RouteDetail route={selected} activity={completed[selected.id]} close={()=>setSelected(null)} onSaved={loadCompleted}/>}
- </>
+const TERRITORIES = {
+  Andalucía: [
+    "Almería",
+    "Cádiz",
+    "Córdoba",
+    "Granada",
+    "Huelva",
+    "Jaén",
+    "Málaga",
+    "Sevilla",
+  ],
+  Aragón: ["Huesca", "Teruel", "Zaragoza"],
+  "Principado de Asturias": ["Asturias"],
+  "Illes Balears": ["Illes Balears"],
+  Canarias: ["Las Palmas", "Santa Cruz de Tenerife"],
+  Cantabria: ["Cantabria"],
+  "Castilla-La Mancha": [
+    "Albacete",
+    "Ciudad Real",
+    "Cuenca",
+    "Guadalajara",
+    "Toledo",
+  ],
+  "Castilla y León": [
+    "Ávila",
+    "Burgos",
+    "León",
+    "Palencia",
+    "Salamanca",
+    "Segovia",
+    "Soria",
+    "Valladolid",
+    "Zamora",
+  ],
+  Cataluña: ["Barcelona", "Girona", "Lleida", "Tarragona"],
+  "Comunidad Valenciana": ["Alicante", "Castellón", "Valencia"],
+  Extremadura: ["Badajoz", "Cáceres"],
+  Galicia: ["A Coruña", "Lugo", "Ourense", "Pontevedra"],
+  "La Rioja": ["La Rioja"],
+  "Comunidad de Madrid": ["Madrid"],
+  "Región de Murcia": ["Murcia"],
+  "Comunidad Foral de Navarra": ["Navarra"],
+  "País Vasco": ["Álava", "Bizkaia", "Gipuzkoa"],
+  Ceuta: ["Ceuta"],
+  Melilla: ["Melilla"],
+};
+const levelClass = (level) => `routeLevel routeLevel-${level}`;
+const value = (number, suffix) =>
+  Number.isFinite(number)
+    ? `${number.toLocaleString("es-ES", { maximumFractionDigits: 1 })}${suffix}`
+    : "No publicado";
+function haversine(a, b) {
+  const rad = (v) => (v * Math.PI) / 180,
+    dLat = rad(b.lat - a.lat),
+    dLon = rad(b.lon - a.lon),
+    x =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+const OFFLINE_ROUTE_PREFIX = "encumbrate:offline-route:";
+const OFFLINE_CATALOG_KEY = "encumbrate:offline-route-catalog";
+const offlineRouteKey = (routeId) => `${OFFLINE_ROUTE_PREFIX}${routeId}`;
+function readOfflineRoute(routeId) {
+  try {
+    let saved = JSON.parse(
+      localStorage.getItem(offlineRouteKey(routeId)) || "null",
+    );
+    if (!saved) {
+      const legacy = JSON.parse(
+        localStorage.getItem("encumbrate:offline-route") || "null",
+      );
+      if (legacy?.id === routeId) {
+        saved = legacy;
+        localStorage.setItem(offlineRouteKey(routeId), JSON.stringify(legacy));
+      }
+    }
+    return saved?.id === routeId &&
+      Array.isArray(saved.points) &&
+      saved.points.length > 1
+      ? saved
+      : null;
+  } catch {
+    return null;
+  }
+}
+async function downloadOfflineRoute(route) {
+  const response = await fetch(
+      `/api/routes/track?id=${encodeURIComponent(route.id)}`,
+      { cache: "no-store" },
+    ),
+    body = await response.json();
+  if (!response.ok || !Array.isArray(body.points) || body.points.length < 2)
+    throw new Error(body.error || "No se ha podido descargar el trazado.");
+  const saved = {
+    id: route.id,
+    name: route.name,
+    points: body.points,
+    source: body.source,
+    distanceKm: body.distanceKm,
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(offlineRouteKey(route.id), JSON.stringify(saved));
+  window.dispatchEvent(
+    new CustomEvent("encumbrate:route-offline", { detail: saved }),
+  );
+  return saved;
+}
+function compass(value) {
+  return ["N", "NE", "E", "SE", "S", "SO", "O", "NO"][
+    Math.round(value / 45) % 8
+  ];
+}
+function nearestRoutePoint(position, points) {
+  const nearest = nearestPolylinePoint(position, points);
+  return nearest
+    ? {
+        ...nearest,
+        distanceKm: nearest.distance / 1000,
+        bearing: bearingDegrees(position, nearest.point),
+      }
+    : null;
 }
 
-function RouteCard({route,onClick,activity}){
- const cardRef=useRef(null),[visible,setVisible]=useState(false),photo=useRoutePhoto(route,visible),profile=useRouteProfile(route,visible),shown=enrichedRoute(route,profile);
- useEffect(()=>{const node=cardRef.current;if(!node)return;if(!('IntersectionObserver' in window)){setVisible(true);return}const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)){setVisible(true);observer.disconnect()}},{rootMargin:'240px'});observer.observe(node);return()=>observer.disconnect()},[]);
- return <button ref={cardRef} className={`nearbyRoute ${activity?.trophy_earned?'routeCompleted':''}`} onClick={()=>onClick(shown)}><div className="routeCardPhoto">{photo.src?<img className={photo.trace?'routeTraceImage':''} src={photo.src} alt={photo.trace?`Trazado de ${route.name}`:`Imagen verificada de ${route.name}`} loading="lazy" onError={event=>{event.currentTarget.hidden=true;event.currentTarget.nextElementSibling?.removeAttribute('hidden')}}/>:null}<div className="routePhotoMissing" hidden={Boolean(photo.src)}><span>⌖</span><small>Preparando<br/>trazado…</small></div>{activity?.trophy_earned&&<span className="goldTrophy" aria-label="Ruta completada">🏆</span>}</div><div className="nearbyRouteBody"><div><span className={activity?.trophy_earned?'completedLabel':levelClass(route.level)}>{activity?.trophy_earned?'COMPLETADA':LEVEL_LABELS[route.level]}</span><small>{route.nearbyKm.toLocaleString('es-ES',{maximumFractionDigits:1})} km de ti</small></div><strong>{route.name}</strong>{route.ref&&<em>{route.ref}</em>}<p><b>{value(shown.distanceKm,' km')}</b><span>↗ {value(shown.ascentM,' m')}</span><span>△ {value(shown.maxAltitudeM,' m')}</span></p>{visible&&!shown.distanceKm&&<small className="routeMetricsLoading">Calculando ficha…</small>}</div><span className="routeChevron">›</span></button>
+const routePhotoCache = new Map(),
+  routeProfileCache = new Map();
+function useRoutePhoto(route, enabled = true) {
+  const initialItem = {
+      src: route.image || "",
+      specific: Boolean(route.imageIsSpecific),
+      trace: false,
+      sourceUrl: route.imageSourceUrl || route.sourceUrl,
+      credit: route.imageAttribution || "",
+      license: route.imageLicense || "",
+    },
+    initial = {
+      ...initialItem,
+      gallery: route.imageIsSpecific
+        ? [initialItem, ...(route.imageGallery || [])]
+        : [],
+    };
+  const [photo, setPhoto] = useState(
+    () => routePhotoCache.get(route.id) || initial,
+  );
+  useEffect(() => {
+    let active = true;
+    if (!enabled || route.imageIsSpecific)
+      return () => {
+        active = false;
+      };
+    const cached = routePhotoCache.get(route.id);
+    if (cached) {
+      setPhoto(cached);
+      return () => {
+        active = false;
+      };
+    }
+    const params = new URLSearchParams({
+      id: route.id,
+      name: route.name,
+      ref: route.ref || "",
+      wikipedia: route.wikipedia || "",
+      wikidata: route.wikidata || "",
+      category: route.commonsCategory || "",
+      lat: String(route.lat),
+      lon: String(route.lon),
+    });
+    fetch(`/api/routes/image?${params}`)
+      .then((response) => response.json())
+      .then((data) => {
+        const gallery = (data.gallery || []).map((item) => ({
+          ...item,
+          specific: true,
+        }));
+        const trace = {
+          src: `/api/routes/trace?id=${encodeURIComponent(route.id)}`,
+          specific: false,
+          trace: true,
+          sourceUrl: route.sourceUrl,
+          credit: "Trazado público de OpenStreetMap",
+          license: "© OpenStreetMap contributors",
+          gallery: [],
+        };
+        const resolved = data.found
+          ? {
+              src: data.src,
+              specific: true,
+              trace: false,
+              sourceUrl: data.sourceUrl,
+              credit: data.credit,
+              license: data.license,
+              gallery,
+            }
+          : trace;
+        routePhotoCache.set(route.id, resolved);
+        if (active) setPhoto(resolved);
+      })
+      .catch(() => {
+        const trace = {
+          src: `/api/routes/trace?id=${encodeURIComponent(route.id)}`,
+          specific: false,
+          trace: true,
+          sourceUrl: route.sourceUrl,
+          credit: "Trazado público de OpenStreetMap",
+          license: "© OpenStreetMap contributors",
+          gallery: [],
+        };
+        routePhotoCache.set(route.id, trace);
+        if (active) setPhoto(trace);
+      });
+    return () => {
+      active = false;
+    };
+  }, [route.id, route.imageIsSpecific, enabled]);
+  return photo;
+}
+function useRouteProfile(route, enabled = true) {
+  const complete =
+    Number.isFinite(route.distanceKm) &&
+    Number.isFinite(route.ascentM) &&
+    Number.isFinite(route.maxAltitudeM) &&
+    Number.isFinite(route.minAltitudeM) &&
+    Boolean(route.duration);
+  const [profile, setProfile] = useState(
+    () => routeProfileCache.get(route.id) || null,
+  );
+  useEffect(() => {
+    let active = true;
+    if (!enabled || complete || routeProfileCache.has(route.id))
+      return () => {
+        active = false;
+      };
+    fetch(`/api/routes/profile?id=${encodeURIComponent(route.id)}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.found) return;
+        routeProfileCache.set(route.id, data);
+        if (active) setProfile(data);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [route.id, enabled, complete]);
+  return profile;
+}
+function enrichedRoute(route, profile) {
+  if (!profile) return route;
+  return {
+    ...route,
+    distanceKm: route.distanceKm ?? profile.distanceKm,
+    ascentM: route.ascentM ?? profile.ascentM,
+    maxAltitudeM: route.maxAltitudeM ?? profile.maxAltitudeM,
+    minAltitudeM: route.minAltitudeM ?? profile.minAltitudeM,
+    duration: route.duration || profile.duration,
+    metricsSource: route.metricsSource || profile.source,
+  };
 }
 
-function RouteDirectory({routes,completed,query,setQuery,placeQuery,setPlaceQuery,searchPlace,loadPlace,loadMore,nextCursor,moreLoading,catalogTotal,placeLoading,placeError,catalogLabel,level,setLevel,close,select,history}){const[community,setCommunity]=useState(''),[province,setProvince]=useState('');function chooseCommunity(event){setCommunity(event.target.value);setProvince('')}function chooseProvince(event){const value=event.target.value;setProvince(value);if(value){setPlaceQuery(value);loadPlace(`${value}, España`,'province')}}return <div className="routeDirectory"><header><button onClick={close}>‹</button><div><small>EXPERIENCIAS</small><h1>Buscador de rutas</h1></div><button className="historyButton" onClick={history} aria-label="Abrir mis rutas">🏆</button></header><div className="routeDirectoryControls"><div className="territorySelectors"><select value={community} onChange={chooseCommunity} aria-label="Elegir comunidad autónoma"><option value="">Comunidad autónoma</option>{Object.keys(TERRITORIES).map(name=><option key={name} value={name}>{name}</option>)}</select><select value={province} onChange={chooseProvince} disabled={!community||placeLoading} aria-label="Elegir provincia"><option value="">Provincia</option>{(TERRITORIES[community]||[]).map(name=><option key={name} value={name}>{name}</option>)}</select></div><form className="placeSearch" onSubmit={searchPlace}><label><span>⌖</span><input autoFocus value={placeQuery} onChange={event=>setPlaceQuery(event.target.value)} placeholder="O escribe: Bilbao, Picos de Europa…"/></label><button disabled={placeLoading}>{placeLoading?'Buscando…':'Buscar zona'}</button></form>{placeError&&<small className="placeSearchError">{placeError}</small>}<p className="searchArea">{catalogLabel?`Buscando alrededor de ${catalogLabel}`:'Elige comunidad y provincia, o busca cualquier localidad de España.'}</p><label><span>⌕</span><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Filtrar por nombre de ruta"/></label><select value={level} onChange={event=>setLevel(event.target.value)} aria-label="Filtrar por nivel"><option value="todas">Todos los niveles</option><option value="principiante">Principiante</option><option value="intermedio">Intermedio</option><option value="experto">Experto</option></select></div><p className="routeCount">{routes.length}{catalogTotal>routes.length?` de ${catalogTotal}`:''} rutas mostradas</p><div className="routeDirectoryList">{routes.map(route=><RouteCard key={route.id} route={route} activity={completed[route.id]} onClick={select}/>)}{!routes.length&&<div className="routesState">No hay coincidencias. Prueba otra provincia, localidad, nombre o nivel.</div>}{nextCursor&&<button className="loadMoreRoutes" onClick={loadMore} disabled={moreLoading}>{moreLoading?'Cargando rutas…':'Ver más rutas'}</button>}</div><footer>Busca cualquier comunidad, provincia o localidad de España · Datos públicos · © OpenStreetMap contributors.</footer></div>}
-
-function RouteDetail({route,activity,close,onSaved}){
- const photo=useRoutePhoto(route,true),profile=useRouteProfile(route,true),shown=enrichedRoute(route,profile);
- return <div className="routeScreen catalogRouteDetail"><div className={`routePhoto ${photo.src?'':'routePhotoNoImage'}`} style={photo.src?{backgroundImage:`linear-gradient(0deg,rgba(0,30,20,.92),transparent 62%),url(${photo.src})`}:undefined}><button onClick={close} aria-label="Volver">‹</button>{!photo.src&&<div className="detailPhotoMissing">⌖ Preparando trazado público…</div>}{activity?.trophy_earned&&<div className="detailTrophy">🏆 <b>COMPLETADA</b></div>}<div className="routeName"><span>{route.nearbyKm.toLocaleString('es-ES',{maximumFractionDigits:1})} km desde tu ubicación</span><h1>{route.name}</h1><b className={levelClass(route.level)}>{LEVEL_LABELS[route.level]}</b></div></div><section className="routeSheet"><div className="routeStats"><div><strong>{value(shown.distanceKm,' km')}</strong><small>Distancia</small></div><div><strong>{value(shown.ascentM,' m')}</strong><small>Desnivel +</small></div><div><strong>{value(shown.maxAltitudeM,' m')}</strong><small>Altitud máx.</small></div><div><strong>{shown.duration||'Calculando…'}</strong><small>Duración</small></div></div>{shown.metricsSource&&<p className="routeMetricsSource">Datos: {shown.metricsSource}</p>}{photo.credit&&<p className="routePhotoCredit">{photo.trace?'Trazado':'Foto'}: <a href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">{photo.credit}</a>{photo.license?` · ${photo.license}`:''}</p>}<p>{route.description}</p><div className="routeFacts"><div><small>Nivel orientativo</small><strong>{LEVEL_LABELS[route.level]}</strong></div><div><small>Recorrido</small><strong>{shown.routeType}</strong></div><div><small>Altitud mínima</small><strong>{value(shown.minAltitudeM,' m')}</strong></div><div><small>Red senderista</small><strong>{route.network||'No publicada'}</strong></div></div><RouteAccess route={route}/><RouteGallery photos={photo.gallery||[]} routeName={route.name}/><GpsRecorder route={route} previous={activity} onSaved={onSaved}/>{photo.trace&&<p className="routePhotoNotice">No existe todavía una fotografía pública inequívoca de esta ruta. Mostramos su trazado real y lo sustituiremos cuando exista una imagen verificada o aportada por la comunidad.</p>}<a className="mapBtn routeSource" href={route.officialUrl||route.sourceUrl} target="_blank" rel="noopener noreferrer">Consultar fuente pública ↗</a><p className="routeSafety">Comprueba señalización, meteorología y avisos oficiales antes de salir. La copa acredita el registro GPS dentro de Encúmbrate; no sustituye una homologación oficial.</p></section></div>
+export default function RouteCatalog() {
+  const [routes, setRoutes] = useState([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [catalogOpen, setCatalogOpen] = useState(false),
+    [selected, setSelected] = useState(null),
+    [query, setQuery] = useState(""),
+    [placeQuery, setPlaceQuery] = useState(""),
+    [catalogLabel, setCatalogLabel] = useState(""),
+    [placeLoading, setPlaceLoading] = useState(false),
+    [placeError, setPlaceError] = useState(""),
+    [level, setLevel] = useState("todas"),
+    [usingLocation, setUsingLocation] = useState(false),
+    [completed, setCompleted] = useState({}),
+    [historyOpen, setHistoryOpen] = useState(false),
+    [nextCursor, setNextCursor] = useState(null),
+    [catalogTotal, setCatalogTotal] = useState(0),
+    [activeSearch, setActiveSearch] = useState(null),
+    [moreLoading, setMoreLoading] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const load = (position) => {
+      const params = new URLSearchParams({
+        lat: String(position.lat),
+        lon: String(position.lon),
+        radius: "20000",
+        limit: "200",
+        v: ROUTE_DATA_VERSION,
+      });
+      fetch(`/api/routes?${params}`, { cache: "no-store" })
+        .then(async (response) => {
+          const body = await response.json();
+          if (!response.ok)
+            throw new Error(
+              body.error || "No se ha podido cargar el catálogo.",
+            );
+          if (active) {
+            setRoutes(body.routes || []);
+            localStorage.setItem(
+              OFFLINE_CATALOG_KEY,
+              JSON.stringify(body.routes || []),
+            );
+            setNextCursor(body.nextCursor || null);
+            setCatalogTotal(body.total || body.routes?.length || 0);
+            setActiveSearch({
+              lat: String(position.lat),
+              lon: String(position.lon),
+              radius: "20000",
+            });
+            setLoading(false);
+          }
+        })
+        .catch((err) => {
+          if (active) {
+            let cached = [];
+            try {
+              cached = JSON.parse(
+                localStorage.getItem(OFFLINE_CATALOG_KEY) || "[]",
+              );
+            } catch {}
+            setRoutes(cached);
+            setCatalogTotal(cached.length);
+            setError(cached.length ? "" : err.message);
+            setCatalogLabel(cached.length ? "rutas guardadas offline" : "");
+            setLoading(false);
+          }
+        });
+    };
+    if (!navigator.geolocation) return load(FALLBACK_POSITION);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setUsingLocation(true);
+        load({ lat: coords.latitude, lon: coords.longitude });
+      },
+      () => load(FALLBACK_POSITION),
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    const open = () => setCatalogOpen(true),
+      history = () => setHistoryOpen(true);
+    window.addEventListener("encumbrate:open-routes", open);
+    window.addEventListener("encumbrate:open-route-history", history);
+    return () => {
+      window.removeEventListener("encumbrate:open-routes", open);
+      window.removeEventListener("encumbrate:open-route-history", history);
+    };
+  }, []);
+  useEffect(() => {
+    loadCompleted();
+  }, []);
+  async function loadCompleted() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("route_activities")
+      .select(
+        "id,external_route_key,route_name,route_difficulty,status,distance_km,duration_seconds,trophy_earned,ended_at",
+      )
+      .eq("user_id", user.id)
+      .order("started_at", { ascending: false });
+    const map = {};
+    for (const activity of data || [])
+      if (activity.external_route_key && !map[activity.external_route_key])
+        map[activity.external_route_key] = activity;
+    setCompleted(map);
+  }
+  async function loadPlace(place, scope = "place") {
+    const clean = place.trim();
+    if (!clean)
+      return setPlaceError("Escribe una localidad o elige una provincia.");
+    setPlaceLoading(true);
+    setPlaceError("");
+    try {
+      const search = { place: clean, radius: "20000", scope, limit: "200" };
+      const params = new URLSearchParams({ ...search, v: ROUTE_DATA_VERSION });
+      const response = await fetch(`/api/routes?${params}`, {
+        cache: "no-store",
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error || "No se ha podido buscar esa zona.");
+      setRoutes(body.routes || []);
+      setNextCursor(body.nextCursor || null);
+      setCatalogTotal(body.total || body.routes?.length || 0);
+      setActiveSearch(search);
+      setCatalogLabel(body.searchLabel || clean);
+      setUsingLocation(false);
+      setQuery("");
+      if (!(body.routes || []).length)
+        setPlaceError("No hay rutas públicas catalogadas cerca de esa zona.");
+    } catch (error) {
+      setPlaceError(error.message || "No se ha podido buscar esa zona.");
+    } finally {
+      setPlaceLoading(false);
+    }
+  }
+  async function loadMore() {
+    if (!nextCursor || !activeSearch || moreLoading) return;
+    setMoreLoading(true);
+    try {
+      const params = new URLSearchParams({
+        ...activeSearch,
+        cursor: nextCursor,
+        v: ROUTE_DATA_VERSION,
+      });
+      const response = await fetch(`/api/routes?${params}`, {
+          cache: "no-store",
+        }),
+        body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error || "No se han podido cargar más rutas.");
+      setRoutes((current) => [
+        ...current,
+        ...(body.routes || []).filter(
+          (route) => !current.some((item) => item.id === route.id),
+        ),
+      ]);
+      setNextCursor(body.nextCursor || null);
+      setCatalogTotal(body.total || catalogTotal);
+    } catch (error) {
+      setPlaceError(error.message || "No se han podido cargar más rutas.");
+    } finally {
+      setMoreLoading(false);
+    }
+  }
+  async function searchPlace(event) {
+    event?.preventDefault();
+    await loadPlace(placeQuery);
+  }
+  const filtered = useMemo(
+    () =>
+      routes.filter(
+        (route) =>
+          (level === "todas" || route.level === level) &&
+          (!query.trim() ||
+            `${route.name} ${route.ref}`
+              .toLocaleLowerCase("es")
+              .includes(query.trim().toLocaleLowerCase("es"))),
+      ),
+    [routes, query, level],
+  );
+  const nearest = routes.slice(0, 3);
+  return (
+    <>
+      <RouteSubmission />
+      <RouteSubmissionGuide />
+      <CompassTools />
+      <button
+        className="cSearch routeSearchTrigger"
+        onClick={() => setCatalogOpen(true)}
+        aria-label="Buscar entre todas las rutas"
+      >
+        <span className="searchIcon">⌕</span>
+        <span>Buscar rutas por nombre…</span>
+        <b>☷</b>
+      </button>
+      <button
+        className="proposeRouteButton"
+        onClick={() =>
+          window.dispatchEvent(new CustomEvent("encumbrate:propose-route"))
+        }
+      >
+        ＋ Proponer una ruta que no aparece
+      </button>
+      <div className="sectionTitle">
+        <div>
+          <h2>
+            {catalogLabel
+              ? `Rutas cerca de ${catalogLabel.split(",")[0]}`
+              : "Rutas cerca de ti"}
+          </h2>
+          <small>
+            {catalogLabel
+              ? "Zona elegida en el buscador"
+              : usingLocation
+                ? "Ordenadas desde tu ubicación"
+                : "Mostrando Alicante como ubicación inicial"}
+          </small>
+        </div>
+        <button onClick={() => setCatalogOpen(true)}>Ver todas</button>
+      </div>
+      {loading ? (
+        <div className="routesState">
+          <i />
+          Buscando rutas públicas cercanas…
+        </div>
+      ) : error ? (
+        <div className="routesState routesError">{error}</div>
+      ) : nearest.length ? (
+        <div className="nearbyRoutes">
+          {nearest.map((route) => (
+            <RouteCard
+              key={route.id}
+              route={route}
+              activity={completed[route.id]}
+              onClick={(shown) => setSelected(shown)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="routesState">
+          No hay rutas públicas catalogadas en este radio.
+        </div>
+      )}
+      {catalogOpen && (
+        <RouteDirectory
+          routes={filtered}
+          completed={completed}
+          query={query}
+          setQuery={setQuery}
+          placeQuery={placeQuery}
+          setPlaceQuery={setPlaceQuery}
+          searchPlace={searchPlace}
+          loadPlace={loadPlace}
+          loadMore={loadMore}
+          nextCursor={nextCursor}
+          moreLoading={moreLoading}
+          catalogTotal={catalogTotal}
+          placeLoading={placeLoading}
+          placeError={placeError}
+          catalogLabel={catalogLabel}
+          level={level}
+          setLevel={setLevel}
+          close={() => setCatalogOpen(false)}
+          history={() => {
+            setCatalogOpen(false);
+            setHistoryOpen(true);
+          }}
+          select={(route) => {
+            setCatalogOpen(false);
+            setSelected(route);
+          }}
+        />
+      )}
+      {historyOpen && (
+        <RouteHistory
+          activities={Object.values(completed)}
+          close={() => setHistoryOpen(false)}
+        />
+      )}
+      <Meetups />
+      {selected && (
+        <RouteDetail
+          route={selected}
+          activity={completed[selected.id]}
+          close={() => setSelected(null)}
+          onSaved={loadCompleted}
+          onCreateMeetup={(route) =>
+            window.dispatchEvent(
+              new CustomEvent("encumbrate:create-meetup", { detail: route }),
+            )
+          }
+        />
+      )}
+    </>
+  );
 }
 
-function RouteGallery({photos,routeName}){if(!photos.length)return null;return <section className="routeGallery"><h2>Imágenes del sendero</h2><div>{photos.map((photo,index)=><a key={`${photo.src}-${index}`} href={photo.sourceUrl} target="_blank" rel="noopener noreferrer"><img src={photo.src} alt={`${routeName}, imagen ${index+1}`} loading="lazy"/><small>{photo.credit||'Ver origen'}</small></a>)}</div></section>}
-
-function RouteAccess({route}){
- const[data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
- useEffect(()=>{let active=true;const params=new URLSearchParams({id:route.id,lat:String(route.lat),lon:String(route.lon)});setLoading(true);setError('');fetch(`/api/routes/access?${params}`).then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error||'No se ha podido calcular el acceso.');if(active)setData(body)}).catch(error=>{if(active)setError(error.message||'No se ha podido calcular el acceso.')}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[route.id,route.lat,route.lon]);
- function armTracking(trailhead){const payload={routeId:route.id,trailhead:trailhead||{lat:route.lat,lon:route.lon},armedAt:new Date().toISOString()};localStorage.setItem('encumbrate:armed-route',JSON.stringify(payload));window.dispatchEvent(new CustomEvent('encumbrate:route-armed',{detail:payload}));downloadOfflineRoute(route).catch(()=>{})}
- const fallbackWalking=`https://www.google.com/maps/dir/?api=1&destination=${route.lat},${route.lon}&travelmode=walking&dir_action=navigate`;
- return <section className="routeAccess"><h2>Cómo llegar al sendero</h2>{loading?<div className="routeAccessLoading"><i/>Buscando el aparcamiento público más próximo…</div>:error?<><p className="routeAccessWarning">{error}</p><a className="walkingOnlyButton" href={fallbackWalking} onClick={()=>armTracking()} target="_blank" rel="noopener noreferrer">Abrir ubicación aproximada en Google Maps</a></>:data?.foundParking?<><div className="parkingSummary"><span>🅿</span><div><strong>{data.parking.name}</strong><small>A unos {data.walkingDistanceKm.toLocaleString('es-ES',{maximumFractionDigits:1})} km del punto de acceso calculado</small></div></div><div className="routeAccessSteps"><a href={data.drivingUrl} onClick={()=>armTracking(data.trailhead)} target="_blank" rel="noopener noreferrer"><b>1</b><span><strong>Ir en coche</strong><small>Google Maps hasta el aparcamiento</small></span></a><a href={data.walkingUrl} onClick={()=>armTracking(data.trailhead)} target="_blank" rel="noopener noreferrer"><b>2</b><span><strong>Continuar a pie</strong><small>Del aparcamiento al sendero</small></span></a></div><p className="routeAccessNote">{data.note} Al volver a Encúmbrate junto al sendero, el registro GPS comenzará automáticamente.</p></>:<><p className="routeAccessWarning">{data?.note}</p><a className="walkingOnlyButton" href={data?.walkingUrl} onClick={()=>armTracking(data?.trailhead)} target="_blank" rel="noopener noreferrer">Abrir acceso a pie en Google Maps</a></>}<RouteConditions data={data}/></section>
+function RouteCard({ route, onClick, activity }) {
+  const cardRef = useRef(null),
+    [visible, setVisible] = useState(false),
+    photo = useRoutePhoto(route, visible),
+    profile = useRouteProfile(route, visible),
+    shown = enrichedRoute(route, profile);
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    if (!("IntersectionObserver" in window)) {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <button
+      ref={cardRef}
+      className={`nearbyRoute ${activity?.trophy_earned ? "routeCompleted" : ""}`}
+      onClick={() => onClick(shown)}
+    >
+      <div className="routeCardPhoto">
+        {photo.src ? (
+          <img
+            className={photo.trace ? "routeTraceImage" : ""}
+            src={photo.src}
+            alt={
+              photo.trace
+                ? `Trazado de ${route.name}`
+                : `Imagen verificada de ${route.name}`
+            }
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+              event.currentTarget.nextElementSibling?.removeAttribute("hidden");
+            }}
+          />
+        ) : null}
+        <div className="routePhotoMissing" hidden={Boolean(photo.src)}>
+          <span>⌖</span>
+          <small>
+            Preparando
+            <br />
+            trazado…
+          </small>
+        </div>
+        {activity?.trophy_earned && (
+          <span className="goldTrophy" aria-label="Ruta completada">
+            🏆
+          </span>
+        )}
+      </div>
+      <div className="nearbyRouteBody">
+        <div>
+          <span
+            className={
+              activity?.trophy_earned
+                ? "completedLabel"
+                : levelClass(route.level)
+            }
+          >
+            {activity?.trophy_earned ? "COMPLETADA" : LEVEL_LABELS[route.level]}
+          </span>
+          <small>
+            {route.nearbyKm.toLocaleString("es-ES", {
+              maximumFractionDigits: 1,
+            })}{" "}
+            km de ti
+          </small>
+        </div>
+        <strong>{route.name}</strong>
+        {route.ref && <em>{route.ref}</em>}
+        <p>
+          <b>{value(shown.distanceKm, " km")}</b>
+          <span>↗ {value(shown.ascentM, " m")}</span>
+          <span>△ {value(shown.maxAltitudeM, " m")}</span>
+        </p>
+        {visible && !shown.distanceKm && (
+          <small className="routeMetricsLoading">Calculando ficha…</small>
+        )}
+      </div>
+      <span className="routeChevron">›</span>
+    </button>
+  );
 }
 
-function RouteConditions({data}){if(!data?.petPolicy)return null;const groups=[['Refugios',data.nearby?.shelters],['Hostales y cabañas',data.nearby?.lodging],['Bares y restaurantes',data.nearby?.food],['Centros médicos',data.nearby?.medical],['Tiendas',data.nearby?.shops]];return <div className="routeConditions"><h2>Servicios y condiciones</h2><div className={`petCondition petCondition-${data.petPolicy.status}`}><span>🐾</span><div><strong>{data.petPolicy.label}</strong><small>{data.petPolicy.detail}</small></div></div><div className={`campCondition campCondition-${data.campingPolicy?.status||'unknown'}`}><span>⛺</span><div><strong>{data.campingPolicy?.label}</strong><small>{data.campingPolicy?.detail}</small></div></div>{data.nearby?.camping?.length>0&&<NearbyPlaces title="Campings" items={data.nearby.camping}/>} {groups.map(([title,items])=><NearbyPlaces key={title} title={title} items={items||[]}/>)}</div>}
-function NearbyPlaces({title,items}){return <div className="nearbyPlaces"><strong>{title}</strong>{items.length?<div>{items.map((item,index)=><a key={`${title}-${index}`} href={item.mapsUrl} target="_blank" rel="noopener noreferrer"><span>{item.name}</span><small>{item.distanceKm.toLocaleString('es-ES',{maximumFractionDigits:1})} km de la ruta ↗</small></a>)}</div>:<small>No hay información pública cercana en OpenStreetMap.</small>}</div>}
+function RouteDirectory({
+  routes,
+  completed,
+  query,
+  setQuery,
+  placeQuery,
+  setPlaceQuery,
+  searchPlace,
+  loadPlace,
+  loadMore,
+  nextCursor,
+  moreLoading,
+  catalogTotal,
+  placeLoading,
+  placeError,
+  catalogLabel,
+  level,
+  setLevel,
+  close,
+  select,
+  history,
+}) {
+  const [community, setCommunity] = useState(""),
+    [province, setProvince] = useState("");
+  function chooseCommunity(event) {
+    setCommunity(event.target.value);
+    setProvince("");
+  }
+  function chooseProvince(event) {
+    const value = event.target.value;
+    setProvince(value);
+    if (value) {
+      setPlaceQuery(value);
+      loadPlace(`${value}, España`, "province");
+    }
+  }
+  return (
+    <div className="routeDirectory">
+      <header>
+        <button onClick={close}>‹</button>
+        <div>
+          <small>EXPERIENCIAS</small>
+          <h1>Buscador de rutas</h1>
+        </div>
+        <button
+          className="historyButton"
+          onClick={history}
+          aria-label="Abrir mis rutas"
+        >
+          🏆
+        </button>
+      </header>
+      <div className="routeDirectoryControls">
+        <div className="territorySelectors">
+          <select
+            value={community}
+            onChange={chooseCommunity}
+            aria-label="Elegir comunidad autónoma"
+          >
+            <option value="">Comunidad autónoma</option>
+            {Object.keys(TERRITORIES).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={province}
+            onChange={chooseProvince}
+            disabled={!community || placeLoading}
+            aria-label="Elegir provincia"
+          >
+            <option value="">Provincia</option>
+            {(TERRITORIES[community] || []).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <form className="placeSearch" onSubmit={searchPlace}>
+          <label>
+            <span>⌖</span>
+            <input
+              autoFocus
+              value={placeQuery}
+              onChange={(event) => setPlaceQuery(event.target.value)}
+              placeholder="O escribe: Bilbao, Picos de Europa…"
+            />
+          </label>
+          <button disabled={placeLoading}>
+            {placeLoading ? "Buscando…" : "Buscar zona"}
+          </button>
+        </form>
+        {placeError && <small className="placeSearchError">{placeError}</small>}
+        <p className="searchArea">
+          {catalogLabel
+            ? `Buscando alrededor de ${catalogLabel}`
+            : "Elige comunidad y provincia, o busca cualquier localidad de España."}
+        </p>
+        <label>
+          <span>⌕</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filtrar por nombre de ruta"
+          />
+        </label>
+        <select
+          value={level}
+          onChange={(event) => setLevel(event.target.value)}
+          aria-label="Filtrar por nivel"
+        >
+          <option value="todas">Todos los niveles</option>
+          <option value="principiante">Principiante</option>
+          <option value="intermedio">Intermedio</option>
+          <option value="experto">Experto</option>
+        </select>
+      </div>
+      <p className="routeCount">
+        {routes.length}
+        {catalogTotal > routes.length ? ` de ${catalogTotal}` : ""} rutas
+        mostradas
+      </p>
+      <div className="routeDirectoryList">
+        {routes.map((route) => (
+          <RouteCard
+            key={route.id}
+            route={route}
+            activity={completed[route.id]}
+            onClick={select}
+          />
+        ))}
+        {!routes.length && (
+          <div className="routesState">
+            No hay coincidencias. Prueba otra provincia, localidad, nombre o
+            nivel.
+          </div>
+        )}
+        {nextCursor && (
+          <button
+            className="loadMoreRoutes"
+            onClick={loadMore}
+            disabled={moreLoading}
+          >
+            {moreLoading ? "Cargando rutas…" : "Ver más rutas"}
+          </button>
+        )}
+      </div>
+      <footer>
+        Busca cualquier comunidad, provincia o localidad de España · Datos
+        públicos · © OpenStreetMap contributors.
+      </footer>
+    </div>
+  );
+}
 
-function GpsRecorder({route,previous,onSaved}){const sessionKey='encumbrate:active-gps-session';const[recording,setRecording]=useState(false),[recoverable,setRecoverable]=useState(null),[pendingCount,setPendingCount]=useState(0),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[stats,setStats]=useState({points:0,distance:0,ascent:0,altitude:null}),[completion,setCompletion]=useState(null),[armed,setArmed]=useState(null),[offline,setOffline]=useState(null),[lostOpen,setLostOpen]=useState(false),[guideTrack,setGuideTrack]=useState(null);const watchRef=useRef(null),activityRef=useRef(null),pointsRef=useRef([]),sequenceRef=useRef(0),startingRef=useRef(false),arrivalCheckingRef=useRef(false);
- useEffect(()=>()=>{if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current)},[]);
- useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem(sessionKey)||'null');if(saved?.routeId===route.id){setRecoverable(saved);setPendingCount(saved.pending?.length||0)}}catch{}},[route.id]);
- useEffect(()=>{const online=()=>flushPending();window.addEventListener('online',online);return()=>window.removeEventListener('online',online)},[]);
- useEffect(()=>{const warn=event=>{if(!recording)return;event.preventDefault();event.returnValue=''};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn)},[recording]);
- useEffect(()=>{function sync(event){let payload=event?.detail;try{payload=payload||JSON.parse(localStorage.getItem('encumbrate:armed-route')||'null')}catch{payload=null}setArmed(payload?.routeId===route.id?payload:null)}sync();window.addEventListener('encumbrate:route-armed',sync);window.addEventListener('storage',sync);return()=>{window.removeEventListener('encumbrate:route-armed',sync);window.removeEventListener('storage',sync)}},[route.id]);
- useEffect(()=>{const sync=event=>setOffline(event?.detail?.id===route.id?event.detail:readOfflineRoute(route.id));sync();window.addEventListener('encumbrate:route-offline',sync);return()=>window.removeEventListener('encumbrate:route-offline',sync)},[route.id]);
- useEffect(()=>{if(!armed||recording||busy||previous?.trophy_earned||!navigator.geolocation)return;let active=true;function checkArrival(){if(!active||document.visibilityState==='hidden'||arrivalCheckingRef.current||startingRef.current)return;arrivalCheckingRef.current=true;navigator.geolocation.getCurrentPosition(position=>{arrivalCheckingRef.current=false;if(!active)return;const distance=haversine({lat:position.coords.latitude,lon:position.coords.longitude},armed.trailhead);if(distance<=.15){setMessage('Has llegado al sendero. Iniciando el registro GPS automáticamente…');start()}else setMessage(`Inicio automático preparado · estás a ${distance.toLocaleString('es-ES',{maximumFractionDigits:1})} km del acceso`)},error=>{arrivalCheckingRef.current=false;if(!active)return;setMessage(error.code===1?'Necesitamos permiso de ubicación para detectar tu llegada al sendero.':'Esperando una señal GPS válida para detectar tu llegada.');if(error.code===1){localStorage.removeItem('encumbrate:armed-route');setArmed(null)}},{enableHighAccuracy:true,maximumAge:10000,timeout:15000})}checkArrival();const interval=setInterval(checkArrival,15000),onVisible=()=>{if(document.visibilityState==='visible')checkArrival()};document.addEventListener('visibilitychange',onVisible);return()=>{active=false;clearInterval(interval);document.removeEventListener('visibilitychange',onVisible)}},[armed,recording,busy,route.id,previous?.trophy_earned]);
- async function start(){if(startingRef.current||recording)return;startingRef.current=true;setBusy(true);setMessage('Descargando el trazado para usarlo sin conexión…');try{const saved=readOfflineRoute(route.id)||await downloadOfflineRoute(route);setOffline(saved);const{data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('Inicia sesión para guardar la ruta.');if(!navigator.geolocation)throw new Error('Este dispositivo no ofrece ubicación GPS.');const{data:activity,error}=await supabase.rpc('start_external_route_activity',{p_route_key:route.id,p_route_name:route.name,p_route_difficulty:route.level,p_planned_distance_km:route.distanceKm||null});if(error)throw error;activateSession({...activity,userId:user.id,pending:[],points:[],sequence:0},saved);localStorage.removeItem('encumbrate:armed-route');setArmed(null);setMessage('Trazado disponible offline · grabando recorrido GPS.')}catch(error){setMessage(String(error.message||'').includes('active_route_exists')?'Ya tienes otra ruta en marcha. Finalízala antes de comenzar esta.':error.message||'No hemos podido iniciar la grabación.')}finally{startingRef.current=false;setBusy(false)}}
- function activateSession(session,savedTrack){activityRef.current={id:session.id,userId:session.userId};pointsRef.current=session.points||[];sequenceRef.current=Number(session.sequence||0);const stored={...session,routeId:route.id,routeName:route.name,pending:session.pending||[],points:session.points||[]};localStorage.setItem(sessionKey,JSON.stringify(stored));setRecoverable(null);setPendingCount(stored.pending.length);watchRef.current=navigator.geolocation.watchPosition(position=>savePoint(position,session.userId,session.id),gpsError=>setMessage(gpsError.code===1?'Activa el permiso de ubicación para grabar la ruta.':'Sin señal: conservamos los puntos pendientes en el móvil.'),{enableHighAccuracy:true,maximumAge:3000,timeout:15000});setRecording(true);setGuideTrack(savedTrack||readOfflineRoute(route.id));}
- async function resume(){setBusy(true);try{const{data:{user}}=await supabase.auth.getUser();const{data,error}=await supabase.from('route_activities').select('id,status').eq('id',recoverable.id).eq('user_id',user.id).maybeSingle();if(error||data?.status!=='recording')throw new Error('Esta grabación ya no está activa.');activateSession({...recoverable,userId:user.id},readOfflineRoute(route.id));await flushPending();setMessage('Ruta recuperada · continuamos grabando.')}catch(error){localStorage.removeItem(sessionKey);setRecoverable(null);setMessage(error.message)}finally{setBusy(false)}}
- async function finishRecovered(){setBusy(true);try{const{data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('Inicia sesión para finalizar la ruta.');activityRef.current={id:recoverable.id,userId:user.id};pointsRef.current=recoverable.points||[];sequenceRef.current=Number(recoverable.sequence||0);const saved=await finish();if(saved)setRecoverable(null)}catch(error){setMessage(error.message||'No se ha podido finalizar la ruta pendiente.');setBusy(false)}}
- async function flushPending(){let session;try{session=JSON.parse(localStorage.getItem(sessionKey)||'null')}catch{return}if(!session?.pending?.length||!navigator.onLine)return;const batch=session.pending.slice(0,200);const{error}=await supabase.rpc('append_offline_gps_points',{p_activity_id:session.id,p_points:batch});if(!error){session.pending=session.pending.slice(batch.length);localStorage.setItem(sessionKey,JSON.stringify(session));setPendingCount(session.pending.length);if(session.pending.length)await flushPending()}}
- async function savePoint(position,userId,activityId){const point={lat:position.coords.latitude,lon:position.coords.longitude,altitude:Number.isFinite(position.coords.altitude)?position.coords.altitude:null,accuracy:position.coords.accuracy,at:new Date(position.timestamp).toISOString()};if(point.accuracy>100)return;const previous=pointsRef.current.at(-1);if(previous&&haversine(previous,point)<.005)return;pointsRef.current.push(point);sequenceRef.current+=1;const queued={...point,sequence:sequenceRef.current};let session;try{session=JSON.parse(localStorage.getItem(sessionKey)||'null')}catch{}if(session){session.sequence=sequenceRef.current;session.points=pointsRef.current.slice(-1000);session.pending=[...(session.pending||[]),queued];localStorage.setItem(sessionKey,JSON.stringify(session));setPendingCount(session.pending.length)}let distance=0,ascent=0;for(let i=1;i<pointsRef.current.length;i++){distance+=haversine(pointsRef.current[i-1],pointsRef.current[i]);const delta=pointsRef.current[i].altitude-pointsRef.current[i-1].altitude;if(Number.isFinite(delta)&&delta>=3&&delta<=60)ascent+=delta}setStats({points:pointsRef.current.length,distance,ascent:Math.round(ascent),altitude:point.altitude});await flushPending()}
- async function finish(){setBusy(true);await flushPending();let session;try{session=JSON.parse(localStorage.getItem(sessionKey)||'null')}catch{}if(session?.pending?.length){setBusy(false);setMessage(`Sin cobertura: quedan ${session.pending.length} puntos seguros en el móvil. Conéctate antes de finalizar.`);return false}if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current);watchRef.current=null;const before=(await supabase.from('profiles').select('progression_xp').eq('id',activityRef.current.userId).maybeSingle()).data;const{data,error}=await supabase.rpc('finalize_external_route_activity',{p_activity_id:activityRef.current.id});setRecording(false);setGuideTrack(null);if(error){setBusy(false);setMessage('La grabación terminó, pero no hemos podido guardar el resultado.');return false}localStorage.removeItem(sessionKey);setPendingCount(0);const after=(await supabase.from('profiles').select('progression_xp,progression_badge').eq('id',activityRef.current.userId).maybeSingle()).data;setBusy(false);if(data?.trophy_earned)setCompletion({...data,xp_awarded:Math.max(0,Number(after?.progression_xp||0)-Number(before?.progression_xp||0)),progression_badge:after?.progression_badge});else setMessage('Ruta guardada como incompleta. Podrás volver a intentarla.');onSaved?.();return true}
- return <><section className="gpsRecorder"><h2>Navegación y registro GPS</h2><p>Pulsa iniciar para descargar el trazado y comenzar a guardar tus pasos. La cartografía completa por zona se descarga desde la app Android.</p>{previous?.trophy_earned&&<div className="gpsCompleted"><span>🏆</span><div><strong>Ruta completada anteriormente</strong><small>{Number(previous.distance_km||0).toLocaleString('es-ES',{maximumFractionDigits:1})} km registrados · puedes repetirla</small></div></div>}{offline&&<div className="offlineReady"><b>✓ TRAZADO DISPONIBLE OFFLINE</b><span>{offline.points.length} puntos de referencia guardados</span></div>}{recoverable&&!recording&&<div className="gpsRecoveryCard"><span className="gpsRecoveryPulse">●</span><div><small>RUTA PENDIENTE RECUPERADA</small><strong>{recoverable.routeName||route.name}</strong><p>{(recoverable.points?.length||0).toLocaleString('es-ES')} puntos guardados en este móvil{pendingCount?` · ${pendingCount} pendientes de sincronizar`:''}</p></div><button onClick={resume} disabled={busy}>Continuar ruta</button><button className="gpsRecoveryFinish" onClick={finishRecovered} disabled={busy}>Finalizar ruta pendiente</button><button className="gpsRecoveryLost" onClick={()=>setLostOpen(true)}>⚠ Estoy perdido</button></div>}{armed&&!recording&&!recoverable&&<div className="gpsAutoArmed"><b>⌖ DETECCIÓN PREPARADA</b><span>Te avisaremos al llegar al sendero</span></div>}{recording&&<div className="gpsLive"><b>● EN GRABACIÓN</b><span>{stats.points} puntos</span><span>{stats.distance.toLocaleString('es-ES',{maximumFractionDigits:2})} km</span><span>↗ {stats.ascent} m</span>{stats.altitude!==null&&<span>△ {Math.round(stats.altitude)} m</span>}{pendingCount>0&&<span className="gpsPending">☁ {pendingCount} en espera</span>}</div>}{!recording&&!recoverable&&<button className="startRouteButton" disabled={busy} onClick={start}>{busy?'Descargando ruta…':'Iniciar ruta y guardar trazado offline'}</button>}{(recording||armed)&&<button className="lostButton" onClick={()=>setLostOpen(true)}>⚠ Estoy perdido</button>}{recording&&<button className="stopRouteButton" disabled={busy} onClick={finish}>{busy?'Guardando…':'Finalizar y guardar ruta'}</button>}{message&&<small className="gpsMessage">{message}</small>}{lostOpen&&<LostHelp route={route} offline={offline} close={()=>setLostOpen(false)}/>}</section>{guideTrack&&<LiveRouteGuide route={route} track={guideTrack} onBack={()=>setGuideTrack(null)} onLost={()=>setLostOpen(true)} onFinish={finish}/>} {completion&&<RouteCompletion route={route} activity={completion} close={()=>setCompletion(null)}/>}</>}
+function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
+  const photo = useRoutePhoto(route, true),
+    profile = useRouteProfile(route, true),
+    shown = enrichedRoute(route, profile);
+  return (
+    <div className="routeScreen catalogRouteDetail">
+      <div
+        className={`routePhoto ${photo.src ? "" : "routePhotoNoImage"}`}
+        style={
+          photo.src
+            ? {
+                backgroundImage: `linear-gradient(0deg,rgba(0,30,20,.92),transparent 62%),url(${photo.src})`,
+              }
+            : undefined
+        }
+      >
+        <button onClick={close} aria-label="Volver">
+          ‹
+        </button>
+        {!photo.src && (
+          <div className="detailPhotoMissing">
+            ⌖ Preparando trazado público…
+          </div>
+        )}
+        {activity?.trophy_earned && (
+          <div className="detailTrophy">
+            🏆 <b>COMPLETADA</b>
+          </div>
+        )}
+        <div className="routeName">
+          <span>
+            {route.nearbyKm.toLocaleString("es-ES", {
+              maximumFractionDigits: 1,
+            })}{" "}
+            km desde tu ubicación
+          </span>
+          <h1>{route.name}</h1>
+          <b className={levelClass(route.level)}>{LEVEL_LABELS[route.level]}</b>
+        </div>
+      </div>
+      <section className="routeSheet">
+        <div className="routeStats">
+          <div>
+            <strong>{value(shown.distanceKm, " km")}</strong>
+            <small>Distancia</small>
+          </div>
+          <div>
+            <strong>{value(shown.ascentM, " m")}</strong>
+            <small>Desnivel +</small>
+          </div>
+          <div>
+            <strong>{value(shown.maxAltitudeM, " m")}</strong>
+            <small>Altitud máx.</small>
+          </div>
+          <div>
+            <strong>{shown.duration || "Calculando…"}</strong>
+            <small>Duración</small>
+          </div>
+        </div>
+        {shown.metricsSource && (
+          <p className="routeMetricsSource">Datos: {shown.metricsSource}</p>
+        )}
+        {photo.credit && (
+          <p className="routePhotoCredit">
+            {photo.trace ? "Trazado" : "Foto"}:{" "}
+            <a href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">
+              {photo.credit}
+            </a>
+            {photo.license ? ` · ${photo.license}` : ""}
+          </p>
+        )}
+        <p>{route.description}</p>
+        <div className="routeFacts">
+          <div>
+            <small>Nivel orientativo</small>
+            <strong>{LEVEL_LABELS[route.level]}</strong>
+          </div>
+          <div>
+            <small>Recorrido</small>
+            <strong>{shown.routeType}</strong>
+          </div>
+          <div>
+            <small>Altitud mínima</small>
+            <strong>{value(shown.minAltitudeM, " m")}</strong>
+          </div>
+          <div>
+            <small>Red senderista</small>
+            <strong>{route.network || "No publicada"}</strong>
+          </div>
+        </div>
+        <button
+          className="routeMeetupButton"
+          onClick={() => onCreateMeetup(shown)}
+        >
+          ♧ Crear quedada para esta ruta
+        </button>
+        <RouteAccess route={route} />
+        <RouteGallery photos={photo.gallery || []} routeName={route.name} />
+        <GpsRecorder route={route} previous={activity} onSaved={onSaved} />
+        {photo.trace && (
+          <p className="routePhotoNotice">
+            No existe todavía una fotografía pública inequívoca de esta ruta.
+            Mostramos su trazado real y lo sustituiremos cuando exista una
+            imagen verificada o aportada por la comunidad.
+          </p>
+        )}
+        <a
+          className="mapBtn routeSource"
+          href={route.officialUrl || route.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Consultar fuente pública ↗
+        </a>
+        <p className="routeSafety">
+          Comprueba señalización, meteorología y avisos oficiales antes de
+          salir. La copa acredita el registro GPS dentro de Encúmbrate; no
+          sustituye una homologación oficial.
+        </p>
+      </section>
+    </div>
+  );
+}
 
-function RouteCompletion({route,activity,close}){const duration=Math.max(0,Number(activity.duration_seconds||0)),hours=Math.floor(duration/3600),minutes=Math.round((duration%3600)/60);return <div className="routeCompletionOverlay" role="dialog" aria-modal="true" aria-label="Ruta completada"><section><div className="completionLight"/><span className="completionTrophy">🏆</span><small>RUTA VERIFICADA</small><h2>¡Cumbre conseguida!</h2><p>{route.name}</p><div className="completionStats"><div><b>{Number(activity.distance_km||0).toLocaleString('es-ES',{maximumFractionDigits:2})} km</b><small>Distancia</small></div><div><b>{hours?`${hours} h `:''}{minutes} min</b><small>Tiempo</small></div><div><b>+{Number(activity.elevation_gain_m||0).toLocaleString('es-ES')} m</b><small>Ascenso</small></div><div><b>-{Number(activity.elevation_loss_m||0).toLocaleString('es-ES')} m</b><small>Descenso</small></div><div><b>{activity.min_altitude_m??'—'} m</b><small>Cota mínima</small></div><div><b>{activity.max_altitude_m??'—'} m</b><small>Cota máxima</small></div></div><div className="completionXp"><strong>+{Number(activity.xp_awarded||0).toLocaleString('es-ES')} XP</strong><span>Progreso oficial actualizado</span></div><button onClick={close}>Continuar en Encúmbrate</button></section></div>}
+function RouteGallery({ photos, routeName }) {
+  if (!photos.length) return null;
+  return (
+    <section className="routeGallery">
+      <h2>Imágenes del sendero</h2>
+      <div>
+        {photos.map((photo, index) => (
+          <a
+            key={`${photo.src}-${index}`}
+            href={photo.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <img
+              src={photo.src}
+              alt={`${routeName}, imagen ${index + 1}`}
+              loading="lazy"
+            />
+            <small>{photo.credit || "Ver origen"}</small>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
 
-function OfflineRouteMap({points,position,guidance}){const all=[...points,position],lat0=all.reduce((sum,p)=>sum+p.lat,0)/all.length,scale=Math.max(.2,Math.cos(lat0*Math.PI/180)),project=p=>({x:p.lon*scale,y:-p.lat}),projected=all.map(project),minX=Math.min(...projected.map(p=>p.x)),maxX=Math.max(...projected.map(p=>p.x)),minY=Math.min(...projected.map(p=>p.y)),maxY=Math.max(...projected.map(p=>p.y)),spanX=Math.max(.00001,maxX-minX),spanY=Math.max(.00001,maxY-minY),toCanvas=p=>{const q=project(p),factor=Math.min(320/spanX,220/spanY);return{x:180+(q.x-(minX+maxX)/2)*factor,y:130+(q.y-(minY+maxY)/2)*factor}},routePath=points.map((p,index)=>{const q=toCanvas(p);return`${index?'L':'M'}${q.x.toFixed(1)},${q.y.toFixed(1)}`}).join(' '),user=toCanvas(position),target=toCanvas(guidance.point);return <svg className="offlineRouteMap" viewBox="0 0 360 260" role="img" aria-label="Mapa offline con tu posición y el camino"><rect width="360" height="260" rx="18"/><path className="offlineTerrain" d="M-20 65 Q85 5 185 67 T390 55 M-20 142 Q80 80 190 145 T390 130 M-20 220 Q90 158 195 218 T390 205"/><path className="offlineTrailShadow" d={routePath}/><path className="offlineTrail" d={routePath}/><line className="offlineReturn" x1={user.x} y1={user.y} x2={target.x} y2={target.y}/><circle className="offlineTarget" cx={target.x} cy={target.y} r="8"/><circle className="offlineUserHalo" cx={user.x} cy={user.y} r="14"/><circle className="offlineUser" cx={user.x} cy={user.y} r="7"/><g className="offlineLegend"><rect x="12" y="12" width="186" height="34" rx="17"/><circle cx="29" cy="29" r="5"/><text x="42" y="34">TRAZADO DESCARGADO</text></g></svg>}
+function RouteAccess({ route }) {
+  const [data, setData] = useState(null),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams({
+      id: route.id,
+      lat: String(route.lat),
+      lon: String(route.lon),
+    });
+    setLoading(true);
+    setError("");
+    fetch(`/api/routes/access?${params}`)
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok)
+          throw new Error(body.error || "No se ha podido calcular el acceso.");
+        if (active) setData(body);
+      })
+      .catch((error) => {
+        if (active)
+          setError(error.message || "No se ha podido calcular el acceso.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [route.id, route.lat, route.lon]);
+  function armTracking(trailhead) {
+    const payload = {
+      routeId: route.id,
+      trailhead: trailhead || { lat: route.lat, lon: route.lon },
+      armedAt: new Date().toISOString(),
+    };
+    localStorage.setItem("encumbrate:armed-route", JSON.stringify(payload));
+    window.dispatchEvent(
+      new CustomEvent("encumbrate:route-armed", { detail: payload }),
+    );
+    downloadOfflineRoute(route).catch(() => {});
+  }
+  const fallbackWalking = `https://www.google.com/maps/dir/?api=1&destination=${route.lat},${route.lon}&travelmode=walking&dir_action=navigate`;
+  return (
+    <section className="routeAccess">
+      <h2>Cómo llegar al sendero</h2>
+      {loading ? (
+        <div className="routeAccessLoading">
+          <i />
+          Buscando el aparcamiento público más próximo…
+        </div>
+      ) : error ? (
+        <>
+          <p className="routeAccessWarning">{error}</p>
+          <a
+            className="walkingOnlyButton"
+            href={fallbackWalking}
+            onClick={() => armTracking()}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Abrir ubicación aproximada en Google Maps
+          </a>
+        </>
+      ) : data?.foundParking ? (
+        <>
+          <div className="parkingSummary">
+            <span>🅿</span>
+            <div>
+              <strong>{data.parking.name}</strong>
+              <small>
+                A unos{" "}
+                {data.walkingDistanceKm.toLocaleString("es-ES", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                km del punto de acceso calculado
+              </small>
+            </div>
+          </div>
+          <div className="routeAccessSteps">
+            <a
+              href={data.drivingUrl}
+              onClick={() => armTracking(data.trailhead)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <b>1</b>
+              <span>
+                <strong>Ir en coche</strong>
+                <small>Google Maps hasta el aparcamiento</small>
+              </span>
+            </a>
+            <a
+              href={data.walkingUrl}
+              onClick={() => armTracking(data.trailhead)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <b>2</b>
+              <span>
+                <strong>Continuar a pie</strong>
+                <small>Del aparcamiento al sendero</small>
+              </span>
+            </a>
+          </div>
+          <p className="routeAccessNote">
+            {data.note} Al volver a Encúmbrate junto al sendero, el registro GPS
+            comenzará automáticamente.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="routeAccessWarning">{data?.note}</p>
+          <a
+            className="walkingOnlyButton"
+            href={data?.walkingUrl}
+            onClick={() => armTracking(data?.trailhead)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Abrir acceso a pie en Google Maps
+          </a>
+        </>
+      )}
+      <RouteConditions data={data} />
+    </section>
+  );
+}
 
-function LostHelp({route,offline,close}){const[position,setPosition]=useState(null),[track,setTrack]=useState(offline),[error,setError]=useState(''),[sharing,setSharing]=useState('');useEffect(()=>{if(track)return;downloadOfflineRoute(route).then(setTrack).catch(err=>setError(err.message||'No se ha podido recuperar el trazado offline.'))},[route.id]);useEffect(()=>{if(!navigator.geolocation){setError('Este dispositivo no ofrece ubicación GPS.');return}const id=navigator.geolocation.watchPosition(({coords,timestamp})=>{setPosition({lat:coords.latitude,lon:coords.longitude,accuracy:coords.accuracy,at:timestamp});setError('')},gpsError=>setError(gpsError.code===1?'Activa el permiso de ubicación para poder orientarte.':'No hay señal GPS suficiente. Sal a una zona despejada y vuelve a intentarlo.'),{enableHighAccuracy:true,maximumAge:2000,timeout:15000});return()=>navigator.geolocation.clearWatch(id)},[]);const guidance=position&&track?nearestRoutePoint(position,track.points):null,arrived=Boolean(guidance&&guidance.distanceKm*1000<=Math.max(18,Math.min(35,position.accuracy*1.5)));async function share(){if(!position)return;const url=`https://maps.google.com/?q=${position.lat},${position.lon}`,text=`Estoy aquí: ${position.lat.toFixed(6)}, ${position.lon.toFixed(6)}`;try{if(navigator.share)await navigator.share({title:`Ubicación en ${route.name}`,text,url});else{await navigator.clipboard.writeText(`${text} ${url}`);setSharing('Ubicación copiada.')}}catch{}}return <div className="lostOverlay" role="dialog" aria-modal="true" aria-label="Ayuda para volver al camino"><div className="lostSheet"><header className="lostHeader"><button className="lostBack" onClick={close} aria-label="Volver atrás">‹</button><div><small>AYUDA CON TRAZADO OFFLINE</small><h2>Volver al camino</h2></div></header>{guidance?<><RecoveryRouteMap track={track} position={position} target={guidance.point} bearing={guidance.bearing}/>{arrived?<div className="backOnTrack"><span>✓</span><div><strong>¡Ya estás en marcha otra vez!</strong><small>Has vuelto al trazado. Continúa siguiendo la línea verde.</small></div></div>:<div className="lostDirection"><strong>{Math.round(guidance.distanceKm*1000).toLocaleString('es-ES')} m</strong><b>hacia {compass(guidance.bearing)} · {Math.round(guidance.bearing)}°</b><small>Sigue la línea roja hasta volver al sendero</small></div>}</>:<div className="lostLocating"><i/>{track?'Buscando tu posición GPS…':'Cargando el trazado offline…'}</div>}{position&&<p className="lostAccuracy">Precisión estimada: ±{Math.round(position.accuracy)} m</p>}{error&&<p className="lostError">{error}</p>}<div className="lostSafety"><strong>Antes de avanzar</strong><p>Comprueba que la línea de retorno no cruza cortados, ríos, carreteras, fincas cerradas ni terreno peligroso. Si no ves un paso seguro, detente y pide ayuda.</p></div><div className="lostActions"><button className="shareLocation" onClick={share} disabled={!position}>Compartir mi ubicación</button><a className="emergencyCall" href="tel:112">Llamar al 112</a></div>{sharing&&<small className="shareResult">{sharing}</small>}<p className="lostWarning">La orientación usa GPS y el trazado descargado; puede ser imprecisa y no sustituye a los servicios de emergencia.</p></div></div>}
+function RouteConditions({ data }) {
+  if (!data?.petPolicy) return null;
+  const groups = [
+    ["Refugios", data.nearby?.shelters],
+    ["Hostales y cabañas", data.nearby?.lodging],
+    ["Bares y restaurantes", data.nearby?.food],
+    ["Centros médicos", data.nearby?.medical],
+    ["Tiendas", data.nearby?.shops],
+  ];
+  return (
+    <div className="routeConditions">
+      <h2>Servicios y condiciones</h2>
+      <div className={`petCondition petCondition-${data.petPolicy.status}`}>
+        <span>🐾</span>
+        <div>
+          <strong>{data.petPolicy.label}</strong>
+          <small>{data.petPolicy.detail}</small>
+        </div>
+      </div>
+      <div
+        className={`campCondition campCondition-${data.campingPolicy?.status || "unknown"}`}
+      >
+        <span>⛺</span>
+        <div>
+          <strong>{data.campingPolicy?.label}</strong>
+          <small>{data.campingPolicy?.detail}</small>
+        </div>
+      </div>
+      {data.nearby?.camping?.length > 0 && (
+        <NearbyPlaces title="Campings" items={data.nearby.camping} />
+      )}{" "}
+      {groups.map(([title, items]) => (
+        <NearbyPlaces key={title} title={title} items={items || []} />
+      ))}
+    </div>
+  );
+}
+function NearbyPlaces({ title, items }) {
+  return (
+    <div className="nearbyPlaces">
+      <strong>{title}</strong>
+      {items.length ? (
+        <div>
+          {items.map((item, index) => (
+            <a
+              key={`${title}-${index}`}
+              href={item.mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span>{item.name}</span>
+              <small>
+                {item.distanceKm.toLocaleString("es-ES", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                km de la ruta ↗
+              </small>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <small>No hay información pública cercana en OpenStreetMap.</small>
+      )}
+    </div>
+  );
+}
 
-function RouteHistory({activities,close}){return <div className="routeDirectory routeHistory"><header><button onClick={close}>‹</button><div><small>EXPERIENCIAS</small><h1>Mis rutas</h1></div></header><div className="routeHistoryList">{activities.length?activities.map(activity=><article key={activity.id} className={activity.trophy_earned?'historyCompleted':'historyIncomplete'}><span>{activity.trophy_earned?'🏆':'!'}</span><div><strong>{activity.route_name||'Ruta guardada'}</strong><small>{activity.trophy_earned?'COMPLETADA':'INCOMPLETA'} · {Number(activity.distance_km||0).toLocaleString('es-ES',{maximumFractionDigits:1})} km</small></div></article>):<div className="routesState">Todavía no has grabado ninguna ruta.</div>}</div></div>}
+function GpsRecorder({ route, previous, onSaved }) {
+  const [recording, setRecording] = useState(false),
+    [recoverable, setRecoverable] = useState(null),
+    [pendingCount, setPendingCount] = useState(0),
+    [busy, setBusy] = useState(false),
+    [message, setMessage] = useState(""),
+    [stats, setStats] = useState({
+      points: 0,
+      distance: 0,
+      ascent: 0,
+      altitude: null,
+    }),
+    [completion, setCompletion] = useState(null),
+    [armed, setArmed] = useState(null),
+    [offline, setOffline] = useState(null),
+    [lostOpen, setLostOpen] = useState(false),
+    [guideTrack, setGuideTrack] = useState(null);
+  const watchRef = useRef(null),
+    activityRef = useRef(null),
+    pointsRef = useRef([]),
+    sequenceRef = useRef(0),
+    startingRef = useRef(false),
+    arrivalCheckingRef = useRef(false),
+    flushPromiseRef = useRef(null);
+  useEffect(
+    () => () => {
+      if (watchRef.current !== null)
+        navigator.geolocation.clearWatch(watchRef.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    let active = true;
+    readGpsSession()
+      .then((saved) => {
+        if (active && saved?.routeId === route.id) {
+          setRecoverable(saved);
+          setPendingCount(saved.pending?.length || 0);
+        }
+      })
+      .catch(() => {
+        if (active)
+          setMessage("No se ha podido abrir el almacenamiento GPS offline.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [route.id]);
+  useEffect(() => {
+    const online = () => flushPending();
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, []);
+  useEffect(() => {
+    const warn = (event) => {
+      if (!recording) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [recording]);
+  useEffect(() => {
+    function sync(event) {
+      let payload = event?.detail;
+      try {
+        payload =
+          payload ||
+          JSON.parse(localStorage.getItem("encumbrate:armed-route") || "null");
+      } catch {
+        payload = null;
+      }
+      setArmed(payload?.routeId === route.id ? payload : null);
+    }
+    sync();
+    window.addEventListener("encumbrate:route-armed", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("encumbrate:route-armed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, [route.id]);
+  useEffect(() => {
+    const sync = (event) =>
+      setOffline(
+        event?.detail?.id === route.id
+          ? event.detail
+          : readOfflineRoute(route.id),
+      );
+    sync();
+    window.addEventListener("encumbrate:route-offline", sync);
+    return () => window.removeEventListener("encumbrate:route-offline", sync);
+  }, [route.id]);
+  useEffect(() => {
+    if (
+      !armed ||
+      recording ||
+      busy ||
+      previous?.trophy_earned ||
+      !navigator.geolocation
+    )
+      return;
+    let active = true;
+    function checkArrival() {
+      if (
+        !active ||
+        document.visibilityState === "hidden" ||
+        arrivalCheckingRef.current ||
+        startingRef.current
+      )
+        return;
+      arrivalCheckingRef.current = true;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          arrivalCheckingRef.current = false;
+          if (!active) return;
+          const distance = haversine(
+            { lat: position.coords.latitude, lon: position.coords.longitude },
+            armed.trailhead,
+          );
+          if (distance <= 0.15) {
+            setMessage(
+              "Has llegado al sendero. Iniciando el registro GPS automáticamente…",
+            );
+            start();
+          } else
+            setMessage(
+              `Inicio automático preparado · estás a ${distance.toLocaleString("es-ES", { maximumFractionDigits: 1 })} km del acceso`,
+            );
+        },
+        (error) => {
+          arrivalCheckingRef.current = false;
+          if (!active) return;
+          setMessage(
+            error.code === 1
+              ? "Necesitamos permiso de ubicación para detectar tu llegada al sendero."
+              : "Esperando una señal GPS válida para detectar tu llegada.",
+          );
+          if (error.code === 1) {
+            localStorage.removeItem("encumbrate:armed-route");
+            setArmed(null);
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 },
+      );
+    }
+    checkArrival();
+    const interval = setInterval(checkArrival, 15000),
+      onVisible = () => {
+        if (document.visibilityState === "visible") checkArrival();
+      };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [armed, recording, busy, route.id, previous?.trophy_earned]);
+  async function cachedUser() {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user || null;
+  }
+  async function start() {
+    if (startingRef.current || recording) return;
+    startingRef.current = true;
+    setBusy(true);
+    setMessage("Preparando el trazado para usarlo sin conexión…");
+    try {
+      const saved =
+        readOfflineRoute(route.id) || (await downloadOfflineRoute(route));
+      setOffline(saved);
+      const user = await cachedUser();
+      if (!user)
+        throw new Error(
+          "Inicia sesión antes de salir para poder usar la ruta offline.",
+        );
+      if (!navigator.geolocation)
+        throw new Error("Este dispositivo no ofrece ubicación GPS.");
+      await requestPersistentGpsStorage();
+      const session = {
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        userId: user.id,
+        routeId: route.id,
+        routeName: route.name,
+        routeLevel: route.level,
+        plannedDistanceKm: route.distanceKm || null,
+        startedAt: new Date().toISOString(),
+        pending: [],
+        points: [],
+        sequence: 0,
+      };
+      await activateSession(session, saved);
+      await flushPending();
+      localStorage.removeItem("encumbrate:armed-route");
+      setArmed(null);
+      setMessage(
+        navigator.onLine
+          ? "Trazado disponible offline · grabando recorrido GPS."
+          : "Ruta iniciada sin conexión · los datos se sincronizarán al recuperar cobertura.",
+      );
+    } catch (error) {
+      setMessage(error.message || "No hemos podido iniciar la grabación.");
+    } finally {
+      startingRef.current = false;
+      setBusy(false);
+    }
+  }
+  async function activateSession(session, savedTrack) {
+    activityRef.current = {
+      id: session.remoteId || session.id,
+      userId: session.userId,
+    };
+    pointsRef.current = session.points || [];
+    sequenceRef.current = Number(session.sequence || 0);
+    const stored = {
+      ...session,
+      routeId: route.id,
+      routeName: route.name,
+      pending: session.pending || [],
+      points: session.points || [],
+    };
+    await writeGpsSession(stored, { replace: true });
+    setRecoverable(null);
+    setPendingCount(stored.pending.length);
+    watchRef.current = navigator.geolocation.watchPosition(
+      (position) =>
+        savePoint(position, session.userId, session.remoteId || session.id),
+      (gpsError) =>
+        setMessage(
+          gpsError.code === 1
+            ? "Activa el permiso de ubicación para grabar la ruta."
+            : "Sin señal: conservamos los puntos pendientes en el móvil.",
+        ),
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
+    );
+    setRecording(true);
+    setGuideTrack(savedTrack || readOfflineRoute(route.id));
+  }
+  async function resume() {
+    setBusy(true);
+    try {
+      const user = await cachedUser();
+      if (!user || recoverable.userId !== user.id)
+        throw new Error("Esta ruta pertenece a otra sesión del dispositivo.");
+      await activateSession(recoverable, readOfflineRoute(route.id));
+      await flushPending();
+      setMessage("Ruta recuperada · continuamos grabando.");
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function finishRecovered() {
+    activityRef.current = {
+      id: recoverable.remoteId || recoverable.id,
+      userId: recoverable.userId,
+    };
+    pointsRef.current = recoverable.points || [];
+    sequenceRef.current = Number(recoverable.sequence || 0);
+    const saved = await finish();
+    if (saved) setRecoverable(null);
+  }
+  async function flushPending() {
+    if (flushPromiseRef.current) return flushPromiseRef.current;
+    flushPromiseRef.current = performFlush().finally(() => {
+      flushPromiseRef.current = null;
+    });
+    return flushPromiseRef.current;
+  }
+  async function performFlush() {
+    let session = await readGpsSession().catch(() => null);
+    if (!session || !navigator.onLine) return false;
+    if (!session.remoteId) {
+      const { data, error } = await supabase.rpc(
+        "start_external_route_activity",
+        {
+          p_route_key: session.routeId,
+          p_route_name: session.routeName,
+          p_route_difficulty: session.routeLevel || "intermedio",
+          p_planned_distance_km: session.plannedDistanceKm,
+        },
+      );
+      if (error) return false;
+      const activity = Array.isArray(data) ? data[0] : data;
+      if (!activity?.id) return false;
+      session.remoteId = activity.id;
+      activityRef.current = { id: activity.id, userId: session.userId };
+      await writeGpsSession(session);
+    }
+    while (session.pending?.length) {
+      const batch = session.pending.slice(0, 200),
+        { error } = await supabase.rpc("append_offline_gps_points", {
+          p_activity_id: session.remoteId,
+          p_points: batch,
+        });
+      if (error) return false;
+      await markPendingGpsPointsSent(session.id, batch.length);
+      session = await readGpsSession().catch(() => null);
+      if (!session) return false;
+      setPendingCount(session.pending.length);
+    }
+    const latest = await readGpsSession().catch(() => null);
+    if (latest?.finishRequested) {
+      if (latest.pending?.length) return false;
+      const { data, error } = await supabase.rpc(
+        "finalize_external_route_activity",
+        { p_activity_id: latest.remoteId },
+      );
+      if (error) return false;
+      await clearGpsSession();
+      setRecoverable(null);
+      setPendingCount(0);
+      if (data?.trophy_earned) setCompletion(data);
+      onSaved?.();
+    }
+    return true;
+  }
+  async function savePoint(position, userId, activityId) {
+    const point = {
+      lat: position.coords.latitude,
+      lon: position.coords.longitude,
+      altitude: Number.isFinite(position.coords.altitude)
+        ? position.coords.altitude
+        : null,
+      accuracy: position.coords.accuracy,
+      at: new Date(position.timestamp).toISOString(),
+    };
+    if (point.accuracy > 100) return;
+    const previous = pointsRef.current.at(-1);
+    if (previous && haversine(previous, point) < 0.005) return;
+    pointsRef.current.push(point);
+    sequenceRef.current += 1;
+    const queued = { ...point, sequence: sequenceRef.current };
+    const session = await readGpsSession().catch(() => null);
+    if (session) {
+      if ((session.pending?.length || 0) >= 20000) {
+        setMessage(
+          "Almacenamiento GPS lleno: recupera conexión antes de continuar.",
+        );
+        return;
+      }
+      try {
+        await appendGpsPoint(session, queued);
+        setPendingCount((session.pending?.length || 0) + 1);
+      } catch {
+        setMessage(
+          "El navegador no dispone de espacio seguro. Abre la app Android para rutas largas.",
+        );
+        return;
+      }
+    }
+    let distance = 0,
+      ascent = 0;
+    for (let i = 1; i < pointsRef.current.length; i++) {
+      distance += haversine(pointsRef.current[i - 1], pointsRef.current[i]);
+      const delta =
+        pointsRef.current[i].altitude - pointsRef.current[i - 1].altitude;
+      if (Number.isFinite(delta) && delta >= 3 && delta <= 60) ascent += delta;
+    }
+    setStats({
+      points: pointsRef.current.length,
+      distance,
+      ascent: Math.round(ascent),
+      altitude: point.altitude,
+    });
+    await flushPending();
+  }
+  async function finish() {
+    setBusy(true);
+    if (watchRef.current !== null)
+      navigator.geolocation.clearWatch(watchRef.current);
+    watchRef.current = null;
+    setRecording(false);
+    setGuideTrack(null);
+    const session = await readGpsSession().catch(() => null);
+    if (!session) {
+      setBusy(false);
+      return false;
+    }
+    session.finishRequested = true;
+    await writeGpsSession(session);
+    const synced = await flushPending();
+    setBusy(false);
+    if (synced) {
+      setMessage("Ruta finalizada y guardada.");
+      return true;
+    }
+    setRecoverable(session);
+    setMessage(
+      `Ruta finalizada en el móvil${session.pending?.length ? ` · ${session.pending.length} puntos protegidos` : ""}. Se sincronizará al recuperar cobertura.`,
+    );
+    return true;
+  }
+  return (
+    <>
+      <section className="gpsRecorder">
+        <h2>Navegación y registro GPS</h2>
+        <p>
+          Pulsa iniciar para descargar el trazado y comenzar a guardar tus
+          pasos. La cartografía completa por zona se descarga desde la app
+          Android.
+        </p>
+        {previous?.trophy_earned && (
+          <div className="gpsCompleted">
+            <span>🏆</span>
+            <div>
+              <strong>Ruta completada anteriormente</strong>
+              <small>
+                {Number(previous.distance_km || 0).toLocaleString("es-ES", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+                km registrados · puedes repetirla
+              </small>
+            </div>
+          </div>
+        )}
+        {offline && (
+          <div className="offlineReady">
+            <b>✓ TRAZADO DISPONIBLE OFFLINE</b>
+            <span>{offline.points.length} puntos de referencia guardados</span>
+          </div>
+        )}
+        {recoverable && !recording && (
+          <div className="gpsRecoveryCard">
+            <span className="gpsRecoveryPulse">●</span>
+            <div>
+              <small>RUTA PENDIENTE RECUPERADA</small>
+              <strong>{recoverable.routeName || route.name}</strong>
+              <p>
+                {(recoverable.points?.length || 0).toLocaleString("es-ES")}{" "}
+                puntos guardados en este móvil
+                {pendingCount
+                  ? ` · ${pendingCount} pendientes de sincronizar`
+                  : ""}
+              </p>
+            </div>
+            <button onClick={resume} disabled={busy}>
+              Continuar ruta
+            </button>
+            <button
+              className="gpsRecoveryFinish"
+              onClick={finishRecovered}
+              disabled={busy}
+            >
+              Finalizar ruta pendiente
+            </button>
+            <button
+              className="gpsRecoveryLost"
+              onClick={() => setLostOpen(true)}
+            >
+              ⚠ Estoy perdido
+            </button>
+          </div>
+        )}
+        {armed && !recording && !recoverable && (
+          <div className="gpsAutoArmed">
+            <b>⌖ DETECCIÓN PREPARADA</b>
+            <span>Te avisaremos al llegar al sendero</span>
+          </div>
+        )}
+        {recording && (
+          <div className="gpsLive">
+            <b>● EN GRABACIÓN</b>
+            <span>{stats.points} puntos</span>
+            <span>
+              {stats.distance.toLocaleString("es-ES", {
+                maximumFractionDigits: 2,
+              })}{" "}
+              km
+            </span>
+            <span>↗ {stats.ascent} m</span>
+            {stats.altitude !== null && (
+              <span>△ {Math.round(stats.altitude)} m</span>
+            )}
+            {pendingCount > 0 && (
+              <span className="gpsPending">☁ {pendingCount} en espera</span>
+            )}
+          </div>
+        )}
+        {!recording && !recoverable && (
+          <button className="startRouteButton" disabled={busy} onClick={start}>
+            {busy
+              ? "Descargando ruta…"
+              : "Iniciar ruta y guardar trazado offline"}
+          </button>
+        )}
+        {(recording || armed) && (
+          <button className="lostButton" onClick={() => setLostOpen(true)}>
+            ⚠ Estoy perdido
+          </button>
+        )}
+        {recording && (
+          <button className="stopRouteButton" disabled={busy} onClick={finish}>
+            {busy ? "Guardando…" : "Finalizar y guardar ruta"}
+          </button>
+        )}
+        {message && <small className="gpsMessage">{message}</small>}
+        {lostOpen && (
+          <LostHelp
+            route={route}
+            offline={offline}
+            breadcrumbs={
+              pointsRef.current.length
+                ? pointsRef.current
+                : recoverable?.points || []
+            }
+            close={() => setLostOpen(false)}
+          />
+        )}
+      </section>
+      {guideTrack && (
+        <LiveRouteGuide
+          route={route}
+          track={guideTrack}
+          onBack={() => setGuideTrack(null)}
+          onLost={() => setLostOpen(true)}
+          onFinish={finish}
+        />
+      )}{" "}
+      {completion && (
+        <RouteCompletion
+          route={route}
+          activity={completion}
+          close={() => setCompletion(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function RouteCompletion({ route, activity, close }) {
+  const duration = Math.max(0, Number(activity.duration_seconds || 0)),
+    hours = Math.floor(duration / 3600),
+    minutes = Math.round((duration % 3600) / 60);
+  return (
+    <div
+      className="routeCompletionOverlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ruta completada"
+    >
+      <section>
+        <div className="completionLight" />
+        <span className="completionTrophy">🏆</span>
+        <small>RUTA VERIFICADA</small>
+        <h2>¡Cumbre conseguida!</h2>
+        <p>{route.name}</p>
+        <div className="completionStats">
+          <div>
+            <b>
+              {Number(activity.distance_km || 0).toLocaleString("es-ES", {
+                maximumFractionDigits: 2,
+              })}{" "}
+              km
+            </b>
+            <small>Distancia</small>
+          </div>
+          <div>
+            <b>
+              {hours ? `${hours} h ` : ""}
+              {minutes} min
+            </b>
+            <small>Tiempo</small>
+          </div>
+          <div>
+            <b>
+              +{Number(activity.elevation_gain_m || 0).toLocaleString("es-ES")}{" "}
+              m
+            </b>
+            <small>Ascenso</small>
+          </div>
+          <div>
+            <b>
+              -{Number(activity.elevation_loss_m || 0).toLocaleString("es-ES")}{" "}
+              m
+            </b>
+            <small>Descenso</small>
+          </div>
+          <div>
+            <b>{activity.min_altitude_m ?? "—"} m</b>
+            <small>Cota mínima</small>
+          </div>
+          <div>
+            <b>{activity.max_altitude_m ?? "—"} m</b>
+            <small>Cota máxima</small>
+          </div>
+        </div>
+        <div className="completionXp">
+          <strong>
+            +{Number(activity.xp_awarded || 0).toLocaleString("es-ES")} XP
+          </strong>
+          <span>Progreso oficial actualizado</span>
+        </div>
+        <button onClick={close}>Continuar en Encúmbrate</button>
+      </section>
+    </div>
+  );
+}
+
+function OfflineRouteMap({ points, position, guidance }) {
+  const all = [...points, position],
+    lat0 = all.reduce((sum, p) => sum + p.lat, 0) / all.length,
+    scale = Math.max(0.2, Math.cos((lat0 * Math.PI) / 180)),
+    project = (p) => ({ x: p.lon * scale, y: -p.lat }),
+    projected = all.map(project),
+    minX = Math.min(...projected.map((p) => p.x)),
+    maxX = Math.max(...projected.map((p) => p.x)),
+    minY = Math.min(...projected.map((p) => p.y)),
+    maxY = Math.max(...projected.map((p) => p.y)),
+    spanX = Math.max(0.00001, maxX - minX),
+    spanY = Math.max(0.00001, maxY - minY),
+    toCanvas = (p) => {
+      const q = project(p),
+        factor = Math.min(320 / spanX, 220 / spanY);
+      return {
+        x: 180 + (q.x - (minX + maxX) / 2) * factor,
+        y: 130 + (q.y - (minY + maxY) / 2) * factor,
+      };
+    },
+    routePath = points
+      .map((p, index) => {
+        const q = toCanvas(p);
+        return `${index ? "L" : "M"}${q.x.toFixed(1)},${q.y.toFixed(1)}`;
+      })
+      .join(" "),
+    user = toCanvas(position),
+    target = toCanvas(guidance.point);
+  return (
+    <svg
+      className="offlineRouteMap"
+      viewBox="0 0 360 260"
+      role="img"
+      aria-label="Mapa offline con tu posición y el camino"
+    >
+      <rect width="360" height="260" rx="18" />
+      <path
+        className="offlineTerrain"
+        d="M-20 65 Q85 5 185 67 T390 55 M-20 142 Q80 80 190 145 T390 130 M-20 220 Q90 158 195 218 T390 205"
+      />
+      <path className="offlineTrailShadow" d={routePath} />
+      <path className="offlineTrail" d={routePath} />
+      <line
+        className="offlineReturn"
+        x1={user.x}
+        y1={user.y}
+        x2={target.x}
+        y2={target.y}
+      />
+      <circle className="offlineTarget" cx={target.x} cy={target.y} r="8" />
+      <circle className="offlineUserHalo" cx={user.x} cy={user.y} r="14" />
+      <circle className="offlineUser" cx={user.x} cy={user.y} r="7" />
+      <g className="offlineLegend">
+        <rect x="12" y="12" width="186" height="34" rx="17" />
+        <circle cx="29" cy="29" r="5" />
+        <text x="42" y="34">
+          TRAZADO DESCARGADO
+        </text>
+      </g>
+    </svg>
+  );
+}
+
+function LostHelp({ route, offline, breadcrumbs = [], close }) {
+  const [position, setPosition] = useState(null),
+    [track, setTrack] = useState(offline),
+    [error, setError] = useState(""),
+    [sharing, setSharing] = useState("");
+  useEffect(() => {
+    if (track) return;
+    downloadOfflineRoute(route)
+      .then(setTrack)
+      .catch((err) =>
+        setError(
+          err.message || "No se ha podido recuperar el trazado offline.",
+        ),
+      );
+  }, [route.id]);
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setError("Este dispositivo no ofrece ubicación GPS.");
+      return;
+    }
+    const id = navigator.geolocation.watchPosition(
+      ({ coords, timestamp }) => {
+        setPosition({
+          lat: coords.latitude,
+          lon: coords.longitude,
+          accuracy: coords.accuracy,
+          at: timestamp,
+        });
+        setError("");
+      },
+      (gpsError) =>
+        setError(
+          gpsError.code === 1
+            ? "Activa el permiso de ubicación para poder orientarte."
+            : "No hay señal GPS suficiente. Sal a una zona despejada y vuelve a intentarlo.",
+        ),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+  const guidance =
+      position && track ? nearestRoutePoint(position, track.points) : null,
+    arrived = Boolean(
+      guidance &&
+      guidance.distanceKm * 1000 <=
+        Math.max(18, Math.min(35, position.accuracy * 1.5)),
+    );
+  async function share() {
+    if (!position) return;
+    const url = `https://maps.google.com/?q=${position.lat},${position.lon}`,
+      text = `Estoy aquí: ${position.lat.toFixed(6)}, ${position.lon.toFixed(6)}`;
+    try {
+      if (navigator.share)
+        await navigator.share({
+          title: `Ubicación en ${route.name}`,
+          text,
+          url,
+        });
+      else {
+        await navigator.clipboard.writeText(`${text} ${url}`);
+        setSharing("Ubicación copiada.");
+      }
+    } catch {}
+  }
+  return (
+    <div
+      className="lostOverlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ayuda para volver al camino"
+    >
+      <div className="lostSheet">
+        <header className="lostHeader">
+          <button
+            className="lostBack"
+            onClick={close}
+            aria-label="Volver atrás"
+          >
+            ‹
+          </button>
+          <div>
+            <small>AYUDA CON TRAZADO OFFLINE</small>
+            <h2>Volver al camino</h2>
+          </div>
+        </header>
+        {guidance ? (
+          <>
+            <RecoveryRouteMap
+              track={track}
+              position={position}
+              target={guidance.point}
+              bearing={guidance.bearing}
+              breadcrumbs={breadcrumbs}
+            />
+            {arrived ? (
+              <div className="backOnTrack">
+                <span>✓</span>
+                <div>
+                  <strong>¡Ya estás en marcha otra vez!</strong>
+                  <small>
+                    Has vuelto al trazado. Continúa siguiendo la línea verde.
+                  </small>
+                </div>
+              </div>
+            ) : (
+              <div className="lostDirection">
+                <strong>
+                  {Math.round(guidance.distanceKm * 1000).toLocaleString(
+                    "es-ES",
+                  )}{" "}
+                  m
+                </strong>
+                <b>
+                  hacia {compass(guidance.bearing)} ·{" "}
+                  {Math.round(guidance.bearing)}°
+                </b>
+                <small>
+                  {breadcrumbs.length > 1
+                    ? "Prioridad: vuelve por la línea roja de tus propios pasos"
+                    : "No avances en línea recta: detente y comprueba el terreno"}
+                </small>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="lostLocating">
+            <i />
+            {track
+              ? "Buscando tu posición GPS…"
+              : "Cargando el trazado offline…"}
+          </div>
+        )}
+        {position && (
+          <p className="lostAccuracy">
+            Precisión estimada: ±{Math.round(position.accuracy)} m
+          </p>
+        )}
+        {error && <p className="lostError">{error}</p>}
+        <div className="lostSafety">
+          <strong>Antes de avanzar</strong>
+          <p>
+            Comprueba que la línea de retorno no cruza cortados, ríos,
+            carreteras, fincas cerradas ni terreno peligroso. Si no ves un paso
+            seguro, detente y pide ayuda.
+          </p>
+        </div>
+        <div className="lostActions">
+          <button
+            className="shareLocation"
+            onClick={share}
+            disabled={!position}
+          >
+            Compartir mi ubicación
+          </button>
+          <a className="emergencyCall" href="tel:112">
+            Llamar al 112
+          </a>
+        </div>
+        {sharing && <small className="shareResult">{sharing}</small>}
+        <p className="lostWarning">
+          La orientación usa GPS y el trazado descargado; puede ser imprecisa y
+          no sustituye a los servicios de emergencia.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RouteHistory({ activities, close }) {
+  return (
+    <div className="routeDirectory routeHistory">
+      <header>
+        <button onClick={close}>‹</button>
+        <div>
+          <small>EXPERIENCIAS</small>
+          <h1>Mis rutas</h1>
+        </div>
+      </header>
+      <div className="routeHistoryList">
+        {activities.length ? (
+          activities.map((activity) => (
+            <article
+              key={activity.id}
+              className={
+                activity.trophy_earned
+                  ? "historyCompleted"
+                  : "historyIncomplete"
+              }
+            >
+              <span>{activity.trophy_earned ? "🏆" : "!"}</span>
+              <div>
+                <strong>{activity.route_name || "Ruta guardada"}</strong>
+                <small>
+                  {activity.trophy_earned ? "COMPLETADA" : "INCOMPLETA"} ·{" "}
+                  {Number(activity.distance_km || 0).toLocaleString("es-ES", {
+                    maximumFractionDigits: 1,
+                  })}{" "}
+                  km
+                </small>
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="routesState">
+            Todavía no has grabado ninguna ruta.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
