@@ -1,0 +1,97 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromDeviceOrientation,headingFromQuaternion,headingSampleDecision,isCoherentHeadingMotion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
+
+test('normaliza cualquier rumbo al intervalo de la brújula',()=>{
+ assert.equal(normalizeHeading(360),0);
+ assert.equal(normalizeHeading(-10),350);
+ assert.equal(normalizeHeading(725),5);
+});
+
+test('promedia correctamente al cruzar de 359 a 0 grados',()=>{
+ const mean=circularMean([358,359,0,1,2]);
+ assert.ok(mean<1||mean>359);
+ assert.ok(circularSpread([358,359,0,1,2],mean)<=3);
+});
+
+test('el promedio robusto descarta una lectura magnética aislada',()=>{
+ const mean=robustCircularMean([358,359,0,1,2,180]);
+ assert.ok(mean<2||mean>358);
+ assert.equal(COMPASS_TUNING.sensorFrequencyHz,20);
+ assert.equal(COMPASS_TUNING.visualFrequencyHz,10);
+ assert.equal(COMPASS_TUNING.deadbandDegrees,2);
+});
+
+test('el guardia magnético rechaza picos y confirma giros reales',()=>{
+ const spike=headingSampleDecision(10,75,50,null);
+ assert.equal(spike.accept,false);
+ assert.equal(spike.pending.value,75);
+ const confirmed=headingSampleDecision(10,78,100,spike.pending);
+ assert.equal(confirmed.accept,true);
+ assert.equal(confirmed.pending,null);
+ assert.equal(headingSampleDecision(10,22,50,null).accept,true);
+ assert.equal(headingSampleDecision(undefined,220,0,null).accept,true);
+});
+
+test('distingue un giro rápido de una interferencia magnética',()=>{
+ assert.equal(isCoherentHeadingMotion([350,358,6,15,24,35]),true);
+ assert.equal(isCoherentHeadingMotion([10,38,5,42,8,36]),false);
+ assert.equal(isCoherentHeadingMotion([100,100.4,99.8,100.2]),false);
+});
+
+test('suaviza por el camino corto y limita los saltos visuales',()=>{
+ const next=smoothHeading(358,4,{factor:.5,maxStep:3,deadband:0});
+ assert.equal(next,1);
+ assert.equal(angleDifference(4,next),3);
+ assert.equal(smoothHeading(25,25.3,{deadband:.6}),25);
+});
+
+test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
+ assert.equal(adaptiveHeading(0,120),90);
+ assert.equal(adaptiveHeading(359,359.5),359);
+ assert.equal(adaptiveHeading(100,101.4),100);
+ assert.equal(adaptiveHeading(100,101.9),100);
+ assert.ok(adaptiveHeading(100,108)>102&&adaptiveHeading(100,108)<103);
+ assert.ok(adaptiveHeading(100,112)>103&&adaptiveHeading(100,112)<105);
+ const corrected=adaptiveHeading(350,20);
+ assert.ok(corrected>350||corrected<20);
+ assert.ok(Math.abs(angleDifference(20,corrected))<8);
+});
+
+test('mantiene estable el estado ante ruido intermedio y recalibra solo si es alto',()=>{
+ assert.equal(nextCalibrationState('calibrating',9,true),'stable');
+ assert.equal(nextCalibrationState('stable',15,true),'stable');
+ assert.equal(nextCalibrationState('stable',19,true),'calibrating');
+ assert.equal(nextCalibrationState('stable',5,false),'calibrating');
+});
+
+test('convierte el cuaternión Android usando la parte superior del móvil',()=>{
+ const half=Math.SQRT1_2;
+ assert.equal(headingFromQuaternion([0,0,0,1]),0);
+ assert.ok(Math.abs(headingFromQuaternion([0,0,-half,half])-90)<.0001);
+ assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-270)<.0001);
+ assert.equal(headingFromQuaternion(null),null);
+});
+
+test('convierte alpha absoluto y compensa la orientación visible de pantalla',()=>{
+ assert.equal(headingFromDeviceOrientation(0,0),0);
+ assert.equal(headingFromDeviceOrientation(270,0),90);
+ assert.equal(headingFromDeviceOrientation(180,0),180);
+ assert.equal(headingFromDeviceOrientation(90,0),270);
+ assert.equal(headingFromDeviceOrientation(270,90),0);
+ assert.equal(headingFromDeviceOrientation(90,-90),0);
+ assert.equal(headingFromDeviceOrientation(NaN,0),null);
+});
+
+test('prioriza el sensor absoluto avanzado sin permitir que el legado lo sustituya',()=>{
+ assert.equal(shouldUseHeadingSource('Sensor Android','Sensor Android avanzado'),true);
+ assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Sensor Android'),false);
+ assert.equal(shouldUseHeadingSource('Sensor Android avanzado','Brújula iPhone'),true);
+ assert.equal(shouldUseHeadingSource('','Sensor Android'),true);
+ assert.equal(shouldUseHeadingSource('','Sensor Android avanzado'),true);
+});
+
+test('el aviso magnético no reaparece después de pulsar Entendido',()=>{
+ assert.match(calibrationWarning(false,{spread:30}),/inestable/);
+ assert.equal(calibrationWarning(true,{spread:30}),'');
+});

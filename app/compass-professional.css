@@ -1,17 +1,18 @@
-.compassWidget{width:184px;padding:10px;border:1px solid #49685d;border-radius:16px;background:linear-gradient(155deg,#123f33f5,#062b23f7);color:#f4f1e7;box-shadow:0 12px 34px #001d1766,inset 0 1px #ffffff1c}
+.compassWidget{width:148px;padding:8px;border:1px solid #55766a;border-radius:14px;background:linear-gradient(155deg,#123f33f7,#05271ff9);color:#f4f1e7;box-shadow:0 10px 26px #001d1760,inset 0 1px #ffffff1c;touch-action:none;user-select:none}
+.compassDragHandle{cursor:grab;touch-action:none}.compassDragHandle:active{cursor:grabbing}
 .compassWidget header small{color:#d5a947;font-size:6.5px;letter-spacing:1.15px}
-.compassWidget header strong{color:#fff;font-size:14px;font-variant-numeric:tabular-nums;letter-spacing:.6px}
-.compassWidget header button{border:1px solid #ffffff20;background:#ffffff12;color:#f7f4ea}
-.compassDial{width:122px;height:122px;margin:11px auto 7px;border:3px solid #b89343;background:#eeeade;box-shadow:0 0 0 4px #06251e,0 5px 16px #0008,inset 0 0 0 2px #c8c0aa}
+.compassWidget header strong{color:#fff;font-size:12px;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.compassWidget header button{width:24px;height:24px;border:1px solid #ffffff20;background:#ffffff12;color:#f7f4ea;font-size:17px}
+.compassDial{width:94px;height:94px;margin:9px auto 5px;border:3px solid #b89343;background:#eeeade;box-shadow:0 0 0 3px #06251e,0 4px 13px #0008,inset 0 0 0 2px #c8c0aa}
 .compassTicks{position:absolute;inset:4px;border-radius:50%;background:repeating-conic-gradient(from -1deg,#183f35 0 1deg,transparent 1deg 10deg);mask:radial-gradient(circle,transparent 0 77%,#000 78%);-webkit-mask:radial-gradient(circle,transparent 0 77%,#000 78%)}
-.compassRose{inset:8px;transition:transform .28s cubic-bezier(.2,.7,.25,1)}
+.compassRose{inset:8px;transition:transform .14s cubic-bezier(.2,.75,.3,1);will-change:transform}
 .compassRose b{color:#30473f;font-family:Georgia,serif;font-size:10px;font-weight:900}
 .compassRose .north{top:1px;color:#c3312d;font-size:12px}.compassRose .south{bottom:1px}.compassRose .east{right:2px}.compassRose .west{left:2px}
-.compassRose i{top:18px;border-left-width:7px;border-right-width:7px;border-bottom:35px solid #c52f2b;filter:drop-shadow(0 1px 1px #0005)}
-.compassRose i:after{top:35px;left:-7px;border-left-width:7px;border-right-width:7px;border-top:35px solid #1d4d40}
+.compassRose i{top:15px;border-left-width:6px;border-right-width:6px;border-bottom:26px solid #c52f2b;filter:drop-shadow(0 1px 1px #0005)}
+.compassRose i:after{top:26px;left:-6px;border-left-width:6px;border-right-width:6px;border-top:26px solid #1d4d40}
 .compassIndex{top:-12px;color:#e6b74f;font-size:10px;text-shadow:0 1px #000}
 .compassHub{position:absolute;z-index:4;left:50%;top:50%;width:10px;height:10px;transform:translate(-50%,-50%);border:2px solid #f3ead2;border-radius:50%;background:#1a3f35;box-shadow:0 1px 3px #0008}
-.compassStatus{display:flex;align-items:center;gap:6px;min-height:18px;padding:2px 28px 2px 4px;color:#cbd8d3;font-size:8px;font-weight:800;letter-spacing:.3px}
+.compassStatus{display:flex;align-items:center;gap:5px;min-height:17px;padding:2px 24px 2px 3px;color:#cbd8d3;font-size:7px;font-weight:800;letter-spacing:.2px}
 .compassStatus i{width:7px;height:7px;border-radius:50%;background:#d39734;box-shadow:0 0 0 3px #d3973422}.compassStatus.stable i{background:#6fd08a;box-shadow:0 0 0 3px #6fd08a22}.compassStatus.calibrating i{animation:compassPulse 1.2s infinite}
-.compassWidget>p{background:#f3d998;color:#4c3a10}.compassActivate{background:#bf8a2d;color:#102e26}.compassLearn{border:1px solid #ffffff20;background:#ffffff12;color:#e8c46d}
+.compassWidget>p{background:#f3d998;color:#4c3a10}.compassActivate{background:#bf8a2d;color:#102e26}.compassLearn{right:7px;bottom:7px;width:22px;height:22px;border:1px solid #ffffff20;background:#ffffff12;color:#e8c46d}
 @keyframes compassPulse{50%{opacity:.35;transform:scale(.75)}}

@@ -1,0 +1,47 @@
+.profileBadgeStage{
+  position:relative;z-index:1;display:grid;place-items:center;
+  flex:0 0 120px;width:120px;height:132px;isolation:isolate;
+}
+.profileBadgeLight{
+  position:absolute;inset:4px -7px -4px;z-index:-1;border-radius:50%;
+  background:radial-gradient(circle,#ffe79566 0 22%,#e9b84135 38%,transparent 70%);
+  filter:blur(2px);animation:profileBadgePulse 3s ease-in-out infinite;
+}
+.profileBadgeLight:before{content:"";position:absolute;inset:21px;border-radius:50%;background:#ffe79b80;filter:blur(18px)}
+.profileBadgeLight i{position:absolute;left:50%;top:4px;width:1px;height:112px;background:linear-gradient(transparent,#ffeaa6b8,transparent);transform-origin:50% 58px}
+.profileBadgeLight i:nth-child(2){transform:rotate(60deg)}
+.profileBadgeLight i:nth-child(3){transform:rotate(120deg)}
+.profileBadge{
+  position:relative;width:116px!important;height:116px;object-fit:contain;background:transparent;
+  filter:drop-shadow(0 15px 13px #001c1690) drop-shadow(0 0 13px #f8d66b99);
+  animation:profileBadgeFloat 3.2s ease-in-out infinite;will-change:transform;
+}
+.profileProgress{display:grid;grid-template-columns:auto 1fr auto;align-items:center;column-gap:11px}
+.profileProgress>div{padding-right:0}
+.profileNextBadge{
+  grid-row:1;width:64px;height:64px;object-fit:contain;background:transparent;
+  filter:drop-shadow(0 7px 7px #12382b33) drop-shadow(0 0 8px #deb95255);
+  animation:profileNextFloat 3.5s ease-in-out infinite;
+}
+.profileProgress>strong{position:static;grid-column:3;grid-row:1}
+.profileProgress>span{grid-column:1/-1;width:100%}
+@keyframes profileBadgeFloat{0%,100%{transform:translateY(5px) rotate(-1deg)}50%{transform:translateY(-8px) rotate(1deg)}}
+@keyframes profileBadgePulse{0%,100%{opacity:.58;transform:scale(.92) rotate(0)}50%{opacity:1;transform:scale(1.08) rotate(5deg)}}
+@keyframes profileNextFloat{0%,100%{transform:translateY(2px)}50%{transform:translateY(-4px)}}
+@media(max-width:430px){
+  .profileHero{gap:10px;padding-left:14px;padding-right:12px}
+  .profileBadgeStage{flex-basis:100px;width:100px;height:116px}
+  .profileBadge{width:96px!important;height:96px}
+  .profileBadgeLight{inset:9px -4px 5px}
+  .profileIdentity h1{font-size:21px}
+  .profileAvatar{width:76px;height:76px}
+  .profileNextBadge{width:56px;height:56px}
+}
+@media(max-width:360px){
+  .profileBadgeStage{flex-basis:100px;width:100px}
+  .profileBadge{width:96px!important;height:96px}
+  .profileAvatar{width:68px;height:68px}
+  .profileIdentity h1{font-size:18px}
+  .profileIdentity p{font-size:10px}
+}
+@media(prefers-reduced-motion:reduce){.profileBadge,.profileBadgeLight,.profileNextBadge{animation:none}}

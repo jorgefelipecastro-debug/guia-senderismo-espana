@@ -1,14 +1,13 @@
-.routeMeetupFab {
-  position: fixed;
-  z-index: 1100;
-  right: 18px;
-  bottom: calc(18px + env(safe-area-inset-bottom));
+.routeMeetupButton {
+  display: block;
+  width: 100%;
+  margin: 18px 0;
   border: 0;
-  border-radius: 999px;
-  padding: 15px 20px;
+  border-radius: 13px;
+  padding: 15px 18px;
   background: #f1b94f;
   color: #173f34;
   font-size: 16px;
   font-weight: 950;
-  box-shadow: 0 8px 28px #112d2466;
+  box-shadow: 0 6px 18px #112d2430;
 }

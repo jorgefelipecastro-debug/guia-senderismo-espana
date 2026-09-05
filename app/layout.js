@@ -37,6 +37,12 @@ export default function RootLayout({ children }) {
       <body>
         <ServiceWorkerRegister />
         <AuthGate>{children}</AuthGate>
+        <footer className="globalLegalLinks">
+          <a href="/privacidad">Privacidad</a>
+          <a href="/terminos">Términos</a>
+          <a href="/normas-comunidad">Normas de la comunidad</a>
+          <a href="/eliminar-cuenta">Eliminar cuenta</a>
+        </footer>
       </body>
     </html>
   );

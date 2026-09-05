@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import './experience-accreditation.css';
 import './progression-badges.css';
+import './badge-transparency.css';
 import './verified-progression.css';
 import { PROGRESSION, progressionFor } from '../lib/progressionBadges';
 

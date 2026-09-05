@@ -1,5 +1,5 @@
-const CACHE_NAME = 'encumbrate-v11';
-const APP_SHELL = ['/manifest.webmanifest', '/icon-192-v2.jpg', '/icon-512-v2.jpg', '/apple-touch-icon-v2.jpg'];
+const CACHE_NAME = 'encumbrate-v12';
+const APP_SHELL = ['/', '/manifest.webmanifest', '/icon-192-v2.jpg', '/icon-512-v2.jpg', '/apple-touch-icon-v2.jpg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -20,7 +20,10 @@ self.addEventListener('fetch', (event) => {
   const isNavigation = request.mode === 'navigate';
 
   if (isNavigation) {
-    event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => caches.match(request)));
+    event.respondWith(fetch(request, { cache: 'no-store' }).then((response) => {
+      if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+      return response;
+    }).catch(async () => (await caches.match(request)) || caches.match('/')));
     return;
   }
 
