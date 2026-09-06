@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {encryptedAsyncStorage as AsyncStorage} from "../security/encryptedStorage";
 import {
   downloadOfflineCartography,
   removeOfflineCartographySafe,

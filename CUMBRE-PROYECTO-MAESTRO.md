@@ -386,3 +386,13 @@ El cuestionario inicial solo puede producir dos orientaciones:
 Al terminar y guardar el test, antes de entrar en la página principal, se muestra una celebración a pantalla completa con la insignia correspondiente y el nombre del nivel debajo en mayúsculas.
 
 La tercera insignia es **EXPERTO — Serpiente**. Nunca puede obtenerse como resultado del test. Solo se muestra cuando el nivel Experto ha sido ganado mediante el sistema de progresión aprobado o concedido tras acreditar y verificar experiencia. Su marco dorado y más ostentoso expresa que es la categoría superior.
+
+
+## 16. Cifrado local de sesión y localizaciones (05-09-2026)
+
+- La aplicación Android cifra con AES-256-GCM la sesión de Supabase, las rutas descargadas, el estado GPS y cada punto de localización antes de persistirlos.
+- La clave maestra Android se guarda mediante Expo SecureStore, respaldado por Android Keystore; nunca se almacena junto a los datos cifrados.
+- La web cifra la sesión y los registros GPS con Web Crypto AES-GCM antes de guardarlos en IndexedDB. La clave es no extraíble, aunque esta protección local no sustituye la prevención de XSS.
+- Los datos históricos en AsyncStorage, SQLite, localStorage e IndexedDB se migran automáticamente y se elimina la copia en claro después de una migración correcta.
+- La base SQLite activa `secure_delete` y limpia el WAL tras retirar localizaciones antiguas en claro.
+- Este cambio se entrega en la versión móvil 0.1.6 y exige una compilación nativa nueva por incorporar `expo-crypto` y `expo-secure-store`.

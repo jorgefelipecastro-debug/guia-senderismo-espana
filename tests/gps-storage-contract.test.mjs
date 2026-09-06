@@ -15,6 +15,14 @@ const nativeStorage = await readFile(
   new URL("../mobile/src/gps/storage.ts", import.meta.url),
   "utf8",
 );
+const nativeCrypto = await readFile(
+  new URL("../mobile/src/security/encryptedStorage.ts", import.meta.url),
+  "utf8",
+);
+const webCrypto = await readFile(
+  new URL("../lib/encrypted-browser-storage.js", import.meta.url),
+  "utf8",
+);
 
 test("la grabación web usa IndexedDB y migra la sesión local anterior", () => {
   assert.match(webStorage, /indexedDB\.open/);
@@ -33,6 +41,40 @@ test("Android persiste el GPS en SQLite con WAL y transacciones exclusivas", () 
   assert.match(nativeStorage, /withExclusiveTransactionAsync/);
   assert.match(nativeStorage, /AsyncStorage\.multiGet/);
   assert.match(nativeStorage, /AsyncStorage\.multiRemove/);
+  assert.match(nativeStorage, /PRAGMA secure_delete = ON/);
+  assert.match(nativeStorage, /gps_points_secure/);
+  assert.match(nativeStorage, /encryptJson\(point\)/);
+  assert.match(nativeCrypto, /AESEncryptionKey/);
+  assert.match(nativeCrypto, /aesEncryptAsync/);
+  assert.match(nativeCrypto, /SecureStore\.AFTER_FIRST_UNLOCK/);
+});
+
+test("la sesión web usa AES-GCM y migra fuera de localStorage", async () => {
+  assert.match(webCrypto, /AES-GCM/);
+  assert.match(webCrypto, /256}, false, \["encrypt", "decrypt"\]/);
+  globalThis.indexedDB = new IDBFactory();
+  const sessionValues = new Map();
+  globalThis.localStorage = {
+    getItem: key => sessionValues.get(key) ?? null,
+    setItem: (key, value) => sessionValues.set(key, String(value)),
+    removeItem: key => sessionValues.delete(key),
+  };
+  const sessionKey = "sb-test-auth-token", plaintext = '{"access_token":"secreto-prueba"}';
+  globalThis.localStorage.setItem(sessionKey, plaintext);
+  const {encryptedBrowserStorage} = await import("../lib/encrypted-browser-storage.js");
+  assert.equal(await encryptedBrowserStorage.getItem(sessionKey), plaintext);
+  assert.equal(globalThis.localStorage.getItem(sessionKey), null);
+  const request = globalThis.indexedDB.open("encumbrate-secure", 1), db = await new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  }), transaction = db.transaction("vault", "readonly"),
+    recordRequest = transaction.objectStore("vault").get(sessionKey),
+    record = await new Promise((resolve, reject) => {
+      recordRequest.onsuccess = () => resolve(recordRequest.result);
+      recordRequest.onerror = () => reject(recordRequest.error);
+    });
+  assert.match(record.value, /^enc:v1:/);
+  assert.doesNotMatch(record.value, /secreto-prueba/);
 });
 
 test("IndexedDB migra, confirma lotes y recupera una sesión tras reiniciar", async () => {
@@ -58,6 +100,19 @@ test("IndexedDB migra, confirma lotes y recupera una sesión tras reiniciar", as
   assert.equal(migrated.id, legacy.id);
   assert.deepEqual(migrated.pending.map((point) => point.sequence), [2]);
   assert.equal(values.has("encumbrate:active-gps-session"), false);
+  const rawRequest = globalThis.indexedDB.open("encumbrate-gps", 2), rawDb = await new Promise((resolve, reject) => {
+    rawRequest.onsuccess = () => resolve(rawRequest.result);
+    rawRequest.onerror = () => reject(rawRequest.error);
+  }), rawTransaction = rawDb.transaction(["state", "points"], "readonly"),
+    rawStateRequest = rawTransaction.objectStore("state").get("active-session"),
+    rawPointsRequest = rawTransaction.objectStore("points").getAll(),
+    [rawState, rawPoints] = await Promise.all([
+      new Promise((resolve, reject) => { rawStateRequest.onsuccess = () => resolve(rawStateRequest.result); rawStateRequest.onerror = () => reject(rawStateRequest.error); }),
+      new Promise((resolve, reject) => { rawPointsRequest.onsuccess = () => resolve(rawPointsRequest.result); rawPointsRequest.onerror = () => reject(rawPointsRequest.error); }),
+    ]);
+  assert.match(rawState.payload, /^enc:v1:/);
+  assert.equal("session" in rawState, false);
+  assert.ok(rawPoints.every(point => typeof point.payload === "string" && !("lat" in point) && !("lon" in point)));
 
   await storage.appendGpsPoint(migrated, {
     lat: 38.002,

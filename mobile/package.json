@@ -1,6 +1,6 @@
 {
   "name": "encumbrate-mobile",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -15,7 +15,9 @@
     "@rnmapbox/maps": "10.3.5",
     "@supabase/supabase-js": "2.57.4",
     "expo": "~57.0.7",
+    "expo-crypto": "~57.0.2",
     "expo-location": "~19.0.8",
+    "expo-secure-store": "~57.0.3",
     "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "expo-task-manager": "~14.0.8",
