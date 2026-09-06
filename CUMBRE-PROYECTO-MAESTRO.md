@@ -409,3 +409,13 @@ La tercera insignia es **EXPERTO — Serpiente**. Nunca puede obtenerse como res
 - Si no existe conexión, el archivo queda en una cola IndexedDB del dispositivo y se envía al recuperar Internet. Tras confirmar la subida se elimina la copia temporal.
 - El usuario puede añadir una descripción, marcar favoritos, volver a hacer privado un archivo, eliminarlo definitivamente y compartir un resumen textual del álbum mediante las funciones nativas del teléfono.
 - La migración `20260906_moments_private_gallery.sql` crea la tabla, los índices, el bucket privado y las políticas de propiedad. Debe aplicarse antes de publicar la interfaz.
+
+## 18. Refugios y alojamientos (06-09-2026)
+
+- «Refugios y alojamientos» sustituye al acceso genérico «Alojamientos» del menú lateral y está orientado a planificar rutas de montaña.
+- También se puede abrir desde la ficha de cualquier ruta; en ese caso la búsqueda toma como centro el inicio de esa ruta.
+- El mapa general muestra los alojamientos con marcadores naranjas y una ficha rápida con distancia, contacto, web y navegación hasta el lugar.
+- Se incluyen refugios de montaña, refugios libres, campings, albergues, alojamientos rurales, casas o cabañas y hoteles catalogados en OpenStreetMap.
+- La búsqueda permite filtrar por tipo y usar radios de 10, 25 o 50 kilómetros.
+- Encúmbrate no actúa como agencia ni gestiona reservas. El usuario debe comprobar directamente disponibilidad, apertura, servicios y condiciones.
+- La información se consulta en línea y puede ser incompleta o estar desactualizada, pues depende de datos públicos colaborativos; no forma parte todavía de las descargas offline.

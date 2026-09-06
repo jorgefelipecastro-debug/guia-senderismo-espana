@@ -12,6 +12,7 @@
 .mapLegend span { display: flex; align-items: center; gap: 4px; }
 .mapLegend i { width: 10px; height: 10px; border-radius: 50%; background: #16884d; }
 .mapLegend i.medium { background: #1478c8; }.mapLegend i.hard { background: #7545bd; }.mapLegend i.done { background: #d5a62e; border: 2px solid #fff; outline: 1px solid #aa7e11; }
+.mapLegend i.stay { background: #f2a83b; }
 .searchMapArea { position: absolute; z-index: 500; top: calc(190px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); min-width: 175px; padding: 11px 16px; border: 0; border-radius: 22px; background: #07533d; color: #fff; box-shadow: 0 5px 18px #001b1255; font-weight: 800; }
 .mapRouteCount { position: absolute; z-index: 500; right: 12px; bottom: calc(18px + env(safe-area-inset-bottom)); padding: 8px 11px; border-radius: 16px; background: #063d2ce8; color: #fff; font-size: 12px; }
 .mapExplorerError { position: absolute; z-index: 500; left: 16px; right: 16px; bottom: calc(28px + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 420px; padding: 12px 15px; border-radius: 12px; background: #7c241ff0; color: #fff; text-align: center; font-size: 14px; }
@@ -22,5 +23,6 @@
 .mapRoutePreview h2 { margin: 11px 0 8px; padding-right: 28px; font-size: 19px; line-height: 1.2; }
 .mapRoutePreview p { display: flex; flex-wrap: wrap; gap: 13px; margin: 0 0 14px; color: #51685d; font-size: 14px; }
 .openMapRoute { width: 100%; min-height: 47px; border: 0; border-radius: 12px; background: #07533d; color: #fff; font-weight: 900; }
+.mapStayType { padding: 5px 8px; border-radius: 7px; background: #fff1dc; color: #8a5510; font-size: 12px; font-weight: 800; }.mapStayActions{display:flex;gap:7px}.mapStayActions a{flex:1;padding:11px 8px;border-radius:10px;background:#07533d;color:#fff;text-align:center;text-decoration:none;font-size:13px;font-weight:800}.mapStayActions a:last-child{background:#e8f0eb;color:#07533d}
 .routeMapExplorer .leaflet-control-attribution { font-size: 10px; }
 @media (min-width: 760px) { .mapFilters { left: 50%; right: auto; width: min(620px,calc(100% - 32px)); transform: translateX(-50%); }.mapLegend { left: 50%; transform: translateX(-50%); }.routeMapExplorer header { padding-left: max(20px,calc((100% - 900px)/2)); padding-right: max(20px,calc((100% - 900px)/2)); } }
