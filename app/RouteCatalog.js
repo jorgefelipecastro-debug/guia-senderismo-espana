@@ -481,23 +481,6 @@ export default function RouteCatalog() {
       <RouteSubmission />
       <RouteSubmissionGuide />
       <CompassTools />
-      <button
-        className="cSearch routeSearchTrigger"
-        onClick={() => setCatalogOpen(true)}
-        aria-label="Buscar entre todas las rutas"
-      >
-        <span className="searchIcon">⌕</span>
-        <span>Buscar rutas por nombre…</span>
-        <b>☷</b>
-      </button>
-      <button
-        className="proposeRouteButton"
-        onClick={() =>
-          window.dispatchEvent(new CustomEvent("encumbrate:propose-route"))
-        }
-      >
-        ＋ Proponer una ruta que no aparece
-      </button>
       <div className="sectionTitle">
         <div>
           <h2>
@@ -729,8 +712,8 @@ function RouteDirectory({
       <header>
         <button onClick={close}>‹</button>
         <div>
-          <small>EXPERIENCIAS</small>
-          <h1>Buscador de rutas</h1>
+          <small>DESCUBRE ESPAÑA</small>
+          <h1>Explorar rutas</h1>
         </div>
         <button
           className="historyButton"
@@ -740,6 +723,21 @@ function RouteDirectory({
           🏆
         </button>
       </header>
+      <section className="exploreIntro">
+        <div>
+          <strong>Encuentra tu próxima aventura</strong>
+          <span>Busca por territorio, localidad, nombre o dificultad.</span>
+        </div>
+        <button
+          className="proposeRouteButton"
+          onClick={() =>
+            window.dispatchEvent(new CustomEvent("encumbrate:propose-route"))
+          }
+        >
+          <b>＋</b>
+          <span>Proponer una ruta que no aparece</span>
+        </button>
+      </section>
       <div className="routeDirectoryControls">
         <div className="territorySelectors">
           <select

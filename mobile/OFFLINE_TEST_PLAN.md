@@ -1,4 +1,4 @@
-# Validación física offline de Encúmbrate 0.1.5
+# Validación física offline de Encúmbrate 0.1.6 (7)
 
 Realizar la prueba con una ruta corta y segura, nunca por primera vez en montaña.
 
@@ -13,11 +13,26 @@ Realizar la prueba con una ruta corta y segura, nunca por primera vez en montañ
 9. Cerrar la app, quitar el modo avión y abrirla; pulsar «Sincronizar ahora» si aún aparece pendiente.
 10. Confirmar que la ruta desaparece de pendientes y aparece guardada en el historial.
 
-## Migración desde 0.1.4
+## Migración desde 0.1.5
 
-1. En 0.1.4, iniciar una ruta, registrar puntos y dejarla pendiente sin conexión.
-2. Actualizar a 0.1.5 sin borrar datos ni desinstalar la aplicación.
+1. En 0.1.5, iniciar una ruta, registrar puntos y dejarla pendiente sin conexión.
+2. Actualizar a 0.1.6 sin borrar datos ni desinstalar la aplicación.
 3. Abrir Encúmbrate y confirmar que recupera la misma sesión, sus puntos y el retorno por pasos.
 4. Recuperar conexión, sincronizar y comprobar que no duplica ni pierde puntos.
+
+## Evidencias obligatorias
+
+- Modelo del teléfono y versión de Android.
+- Hora de inicio, activación del modo avión, cierre, reinicio y sincronización.
+- Captura de las dos rutas descargadas antes de desconectar.
+- Captura del mapa offline, del retorno rojo y de la finalización pendiente.
+- Número de puntos antes del corte, después del reinicio y tras sincronizar.
+- Confirmación de que la sesión sigue iniciada después de actualizar a 0.1.6.
+
+## Resultado
+
+Marcar cada punto como `SUPERADO` o `FALLIDO` y anotar el síntoma exacto. La
+versión 0.1.6 no se considerará validada para montaña hasta completar todos los
+pasos en un Android físico.
 
 La validación falla si el mapa queda vacío, se pierde algún punto, reaparece una grabación finalizada o se declara sincronizada sin constar en el historial.

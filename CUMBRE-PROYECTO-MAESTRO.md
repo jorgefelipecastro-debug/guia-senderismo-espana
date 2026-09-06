@@ -396,3 +396,4 @@ La tercera insignia es **EXPERTO — Serpiente**. Nunca puede obtenerse como res
 - Los datos históricos en AsyncStorage, SQLite, localStorage e IndexedDB se migran automáticamente y se elimina la copia en claro después de una migración correcta.
 - La base SQLite activa `secure_delete` y limpia el WAL tras retirar localizaciones antiguas en claro.
 - Este cambio se entrega en la versión móvil 0.1.6 y exige una compilación nativa nueva por incorporar `expo-crypto` y `expo-secure-store`.
+- La recuperación se prueba ante cierre durante un corte de red, caída después de que el servidor acepte un lote y reinicio con finalización pendiente. Los reintentos GPS son idempotentes por `(activity_id, sequence_number)` y no deben duplicar localizaciones.

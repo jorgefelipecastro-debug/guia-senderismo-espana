@@ -1107,6 +1107,24 @@ button {
   margin: 2px 0 0;
   font-size: 23px;
 }
+.exploreIntro {
+  padding: 18px 16px 4px;
+  background: #f2f5f1;
+}
+.exploreIntro > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 13px;
+}
+.exploreIntro > div strong {
+  font-size: 18px;
+}
+.exploreIntro > div span {
+  color: #60766a;
+  font-size: 14px;
+  line-height: 1.35;
+}
 .routeDirectoryControls {
   position: sticky;
   top: 77px;
