@@ -397,3 +397,15 @@ La tercera insignia es **EXPERTO — Serpiente**. Nunca puede obtenerse como res
 - La base SQLite activa `secure_delete` y limpia el WAL tras retirar localizaciones antiguas en claro.
 - Este cambio se entrega en la versión móvil 0.1.6 y exige una compilación nativa nueva por incorporar `expo-crypto` y `expo-secure-store`.
 - La recuperación se prueba ante cierre durante un corte de red, caída después de que el servidor acepte un lote y reinicio con finalización pendiente. Los reintentos GPS son idempotentes por `(activity_id, sequence_number)` y no deben duplicar localizaciones.
+
+## 17. Momentos y álbumes de aventura (06-09-2026)
+
+- «Momentos» es el archivo visual personal del senderista y se abre desde el menú lateral.
+- Permite hacer fotografías, grabar vídeos o seleccionar varios archivos de la galería.
+- Cada archivo puede asociarse a una actividad y queda agrupado por ruta; el resumen muestra cantidad de archivos, distancia y duración registradas.
+- Los archivos son privados por defecto y se almacenan en un bucket privado. Las políticas RLS limitan lectura, edición y eliminación al propietario; solo un cambio voluntario a `community` permite que otros usuarios autenticados lo vean.
+- La red social dispone de una pestaña «Momentos» para las publicaciones que el propietario haya compartido expresamente.
+- Fotografías de hasta 15 MB y vídeos de hasta 100 MB. Las fotografías grandes se redimensionan y comprimen antes de subirlas cuando el navegador lo permite.
+- Si no existe conexión, el archivo queda en una cola IndexedDB del dispositivo y se envía al recuperar Internet. Tras confirmar la subida se elimina la copia temporal.
+- El usuario puede añadir una descripción, marcar favoritos, volver a hacer privado un archivo, eliminarlo definitivamente y compartir un resumen textual del álbum mediante las funciones nativas del teléfono.
+- La migración `20260906_moments_private_gallery.sql` crea la tabla, los índices, el bucket privado y las políticas de propiedad. Debe aplicarse antes de publicar la interfaz.
