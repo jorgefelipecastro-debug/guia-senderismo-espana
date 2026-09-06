@@ -7,6 +7,7 @@ import Meetups from "./Meetups";
 import RouteSubmission from "./RouteSubmission";
 import RouteSubmissionGuide from "./RouteSubmissionGuide";
 import CompassTools from "./CompassTools";
+import RouteMapExplorer from "./RouteMapExplorer";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -306,7 +307,8 @@ export default function RouteCatalog() {
     [nextCursor, setNextCursor] = useState(null),
     [catalogTotal, setCatalogTotal] = useState(0),
     [activeSearch, setActiveSearch] = useState(null),
-    [moreLoading, setMoreLoading] = useState(false);
+    [moreLoading, setMoreLoading] = useState(false),
+    [mapOpen, setMapOpen] = useState(false);
   useEffect(() => {
     let active = true;
     const load = (position) => {
@@ -371,11 +373,14 @@ export default function RouteCatalog() {
   }, []);
   useEffect(() => {
     const open = () => setCatalogOpen(true),
+      openMap = () => setMapOpen(true),
       history = () => setHistoryOpen(true);
     window.addEventListener("encumbrate:open-routes", open);
+    window.addEventListener("encumbrate:open-map", openMap);
     window.addEventListener("encumbrate:open-route-history", history);
     return () => {
       window.removeEventListener("encumbrate:open-routes", open);
+      window.removeEventListener("encumbrate:open-map", openMap);
       window.removeEventListener("encumbrate:open-route-history", history);
     };
   }, []);
@@ -555,6 +560,17 @@ export default function RouteCatalog() {
         <RouteHistory
           activities={Object.values(completed)}
           close={() => setHistoryOpen(false)}
+        />
+      )}
+      {mapOpen && (
+        <RouteMapExplorer
+          initialRoutes={routes}
+          completed={completed}
+          close={() => setMapOpen(false)}
+          select={(route) => {
+            setMapOpen(false);
+            setSelected(route);
+          }}
         />
       )}
       <Meetups />
