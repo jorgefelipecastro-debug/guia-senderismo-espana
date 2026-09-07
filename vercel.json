@@ -5,7 +5,7 @@
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/admin/accommodations/import?batch=2",
+      "path": "/api/admin/accommodations/import?batch=1",
       "schedule": "0 3 * * *"
     }
   ]
