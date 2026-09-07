@@ -3,6 +3,10 @@
     {
       "path": "/api/process-accreditation-emails",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/admin/accommodations/import?batch=2",
+      "schedule": "0 3 * * *"
     }
   ]
 }

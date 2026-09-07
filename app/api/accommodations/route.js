@@ -1,9 +1,71 @@
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
-const ENDPOINTS = ["https://overpass.private.coffee/api/interpreter","https://overpass-api.de/api/interpreter"];
-const TYPES = { alpine_hut:"Refugio de montaña", wilderness_hut:"Refugio libre", camp_site:"Camping", hostel:"Albergue", guest_house:"Alojamiento rural", chalet:"Casa o cabaña", hotel:"Hotel" };
-function distance(a,b){const rad=v=>v*Math.PI/180,dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon),x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
-function safeUrl(value){try{const url=new URL(value);return ["http:","https:"].includes(url.protocol)?url.href:""}catch{return ""}}
-function normalize(element,origin){const tags=element.tags||{},lat=element.lat??element.center?.lat,lon=element.lon??element.center?.lon,type=tags.tourism;if(!tags.name||!TYPES[type]||!Number.isFinite(lat)||!Number.isFinite(lon))return null;return{id:`osm-${element.type}-${element.id}`,name:String(tags.name).slice(0,180),type,label:TYPES[type],lat,lon,distanceKm:distance(origin,{lat,lon}),phone:String(tags["contact:phone"]||tags.phone||"").slice(0,80),website:safeUrl(tags["contact:website"]||tags.website||tags.url||""),openingHours:String(tags.opening_hours||"").slice(0,160),operator:String(tags.operator||"").slice(0,120),pets:["yes","permissive","designated"].includes(tags.dog),parking:tags.parking==="yes"||Boolean(tags["parking:condition"]),internet:!["no",undefined].includes(tags.internet_access),fee:tags.fee||"",sourceUrl:`https://www.openstreetmap.org/${element.type}/${element.id}`}}
-export async function GET(request){const params=request.nextUrl.searchParams,lat=Number(params.get("lat")),lon=Number(params.get("lon")),radius=Math.min(50000,Math.max(5000,Number(params.get("radius"))||25000));if(!Number.isFinite(lat)||!Number.isFinite(lon)||lat<35||lat>44.5||lon< -10||lon>5)return NextResponse.json({error:"Ubicación no válida en España."},{status:400});const query=`[out:json][timeout:20];nwr(around:${Math.round(radius)},${lat},${lon})[tourism~"^(alpine_hut|wilderness_hut|camp_site|hostel|guest_house|chalet|hotel)$"];out center tags 250;`;let lastError;for(const endpoint of ENDPOINTS){try{const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8","User-Agent":"Encumbrate/1.0 (https://www.encumbrate.es)"},body:new URLSearchParams({data:query}),signal:AbortSignal.timeout(24000),next:{revalidate:21600}});if(!response.ok)throw new Error(`Fuente ${response.status}`);const body=await response.json(),origin={lat,lon},items=(body.elements||[]).map(item=>normalize(item,origin)).filter(Boolean).sort((a,b)=>a.distanceKm-b.distanceKm);return NextResponse.json({items,source:"OpenStreetMap",updatedAt:new Date().toISOString()})}catch(error){lastError=error}}return NextResponse.json({error:"No se han podido consultar alojamientos públicos en este momento.",detail:String(lastError?.message||"")},{status:502})}
+
+const TYPES = {
+  alpine_hut: "Refugio de montaña",
+  wilderness_hut: "Refugio libre",
+  camp_site: "Camping",
+  hostel: "Albergue",
+  guest_house: "Alojamiento rural",
+  chalet: "Casa o cabaña",
+  hotel: "Hotel",
+};
+
+function cleanWebsite(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+export async function GET(request) {
+  const params = request.nextUrl.searchParams;
+  const lat = Number(params.get("lat"));
+  const lon = Number(params.get("lon"));
+  const radius = Math.min(50000, Math.max(5000, Number(params.get("radius")) || 25000));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < 35 || lat > 44.5 || lon < -10 || lon > 5) {
+    return NextResponse.json({ error: "Ubicación no válida en España." }, { status: 400 });
+  }
+
+  try {
+    const { data, error } = await getSupabaseAdmin().rpc("nearby_accommodations", {
+      p_lat: lat,
+      p_lon: lon,
+      p_radius_m: Math.round(radius),
+      p_limit: 250,
+    });
+    if (error) throw error;
+    const items = (data || []).map(row => ({
+      id: row.id,
+      name: row.name,
+      type: row.accommodation_type,
+      label: TYPES[row.accommodation_type] || "Alojamiento",
+      lat: row.latitude,
+      lon: row.longitude,
+      distanceKm: Number(row.distance_m) / 1000,
+      phone: row.phone || "",
+      website: cleanWebsite(row.website),
+      openingHours: row.opening_hours || "",
+      operator: row.operator_name || "",
+      pets: Boolean(row.pets),
+      parking: Boolean(row.parking),
+      internet: Boolean(row.internet),
+      fee: row.fee || "",
+      sourceUrl: row.source_url,
+    }));
+    return NextResponse.json(
+      { items, source: "Catálogo Encúmbrate · OpenStreetMap", updatedAt: new Date().toISOString() },
+      { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=86400" } },
+    );
+  } catch (error) {
+    console.error("Accommodation catalog lookup failed", error);
+    return NextResponse.json(
+      { error: "No se ha podido consultar el catálogo de alojamientos en este momento." },
+      { status: 503 },
+    );
+  }
+}
