@@ -303,6 +303,9 @@ export default function RouteCatalog() {
     [level, setLevel] = useState("todas"),
     [usingLocation, setUsingLocation] = useState(false),
     [completed, setCompleted] = useState({}),
+    [historyActivities, setHistoryActivities] = useState([]),
+    [historyHasMore, setHistoryHasMore] = useState(false),
+    [historyLoadingMore, setHistoryLoadingMore] = useState(false),
     [historyOpen, setHistoryOpen] = useState(false),
     [nextCursor, setNextCursor] = useState(null),
     [catalogTotal, setCatalogTotal] = useState(0),
@@ -387,7 +390,8 @@ export default function RouteCatalog() {
   useEffect(() => {
     loadCompleted();
   }, []);
-  async function loadCompleted() {
+  async function loadCompleted(offset = 0, append = false) {
+    if (append) setHistoryLoadingMore(true);
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -398,9 +402,15 @@ export default function RouteCatalog() {
         "id,external_route_key,route_name,route_difficulty,status,distance_km,duration_seconds,trophy_earned,ended_at",
       )
       .eq("user_id", user.id)
-      .order("started_at", { ascending: false });
-    const map = {};
-    for (const activity of data || [])
+      .order("started_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + 19);
+    const page = data || [];
+    setHistoryActivities(current => append ? [...current, ...page.filter(item => !current.some(saved => saved.id === item.id))] : page);
+    setHistoryHasMore(page.length === 20);
+    setHistoryLoadingMore(false);
+    const map = append ? { ...completed } : {};
+    for (const activity of page)
       if (activity.external_route_key && !map[activity.external_route_key])
         map[activity.external_route_key] = activity;
     setCompleted(map);
@@ -558,7 +568,10 @@ export default function RouteCatalog() {
       )}
       {historyOpen && (
         <RouteHistory
-          activities={Object.values(completed)}
+          activities={historyActivities}
+          hasMore={historyHasMore}
+          loadingMore={historyLoadingMore}
+          loadMore={() => loadCompleted(historyActivities.length, true)}
           close={() => setHistoryOpen(false)}
         />
       )}
@@ -2038,7 +2051,7 @@ function LostHelp({ route, offline, breadcrumbs = [], close }) {
   );
 }
 
-function RouteHistory({ activities, close }) {
+function RouteHistory({ activities, hasMore, loadingMore, loadMore, close }) {
   return (
     <div className="routeDirectory routeHistory">
       <header>
@@ -2077,6 +2090,7 @@ function RouteHistory({ activities, close }) {
             Todavía no has grabado ninguna ruta.
           </div>
         )}
+        {hasMore && <button className="historyMore" disabled={loadingMore} onClick={loadMore}>{loadingMore ? "Cargando…" : "Ver más actividades"}</button>}
       </div>
     </div>
   );

@@ -2724,3 +2724,4 @@ button {
   position: relative;
   z-index: 20;
 }
+.historyMore{display:block;width:min(360px,calc(100% - 32px));margin:18px auto;padding:13px;border:1px solid #aac4b8;border-radius:13px;background:#fff;color:#07543d;font-weight:900}.historyMore:disabled{opacity:.6}
