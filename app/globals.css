@@ -432,6 +432,7 @@ button {
 .startBtn {
   font-size: 16px;
 }
+.routeMaterialButton{width:100%;margin:8px 0;padding:15px;border:1px solid #0a6949;border-radius:11px;background:#eef8f1;color:#07583e;font-weight:900}
 @media (min-width: 900px) {
   body {
     background: radial-gradient(

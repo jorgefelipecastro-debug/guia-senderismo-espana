@@ -969,6 +969,7 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
           ♧ Crear quedada para esta ruta
         </button>
         <button className="routeStayButton" onClick={() => window.dispatchEvent(new CustomEvent("encumbrate:open-accommodations", { detail: { lat: route.lat, lon: route.lon, label: route.name } }))}>⌂ Refugios y alojamientos cercanos</button>
+        <button className="routeMaterialButton" onClick={() => window.dispatchEvent(new CustomEvent("encumbrate:open-material", { detail: shown }))}>🎒 Preparar material para esta ruta</button>
         <RouteAccess route={route} />
         <RouteGallery photos={photo.gallery || []} routeName={route.name} />
         <GpsRecorder route={route} previous={activity} onSaved={onSaved} />
