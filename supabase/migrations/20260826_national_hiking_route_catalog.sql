@@ -207,7 +207,8 @@ begin
     upserted_count=p_upserted_count,incomplete_count=v_incomplete,completed_at=now()
   where id=p_run_id;
 
-  if not exists(
+  if coalesce(current_setting('app.enable_external_jobs', true), 'false') = 'true'
+     and not exists(
     select 1 from public.route_import_regions
     where status in ('pending','importing','error')
   ) then
@@ -349,6 +350,11 @@ comment on table public.route_import_regions is
 do $$
 declare v_job_id bigint;
 begin
+  -- External imports are opt-in. Staging and new environments remain isolated
+  -- unless an administrator explicitly enables app.enable_external_jobs.
+  if coalesce(current_setting('app.enable_external_jobs', true), 'false') <> 'true' then
+    return;
+  end if;
   select jobid into v_job_id from cron.job where jobname='encumbrate-national-route-import';
   if v_job_id is not null then perform cron.unschedule(v_job_id); end if;
   perform cron.schedule(
