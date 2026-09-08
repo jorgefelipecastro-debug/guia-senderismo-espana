@@ -8,6 +8,8 @@ test("la API delega distancia, ordenación y paginación en PostGIS", async () =
   const source = await read("app/api/routes/route.js");
   assert.match(source, /rpc\('search_hiking_routes_postgis'/);
   assert.match(source, /item\.distance_m/);
+  assert.doesNotMatch(source, /overpass/i);
+  assert.doesNotMatch(source, /live-fallback/i);
   assert.doesNotMatch(source, /const rows = \[\]/);
   assert.doesNotMatch(source, /memberships\.push/);
 });
