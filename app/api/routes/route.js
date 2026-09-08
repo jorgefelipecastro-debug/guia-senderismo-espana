@@ -95,7 +95,7 @@ function durationLabel(minutes) {
   return `${hours ? `${hours} h` : ''}${rest ? ` ${rest} min` : ''}`.trim();
 }
 
-function storedRoute(row, userPosition) {
+function storedRoute(row, userPosition, databaseDistanceM = null) {
   return {
     id: row.id, name: row.name, ref: row.route_ref || '', level: row.level,
     distanceKm: row.distance_km === null ? null : Number(row.distance_km),
@@ -103,7 +103,7 @@ function storedRoute(row, userPosition) {
     duration: durationLabel(row.duration_minutes), routeType: row.route_type || 'No publicado',
     description: row.description || `Sendero ${row.route_ref ? `${row.route_ref} ` : ''}publicado en OpenStreetMap. Comprueba siempre el estado y la señalización antes de salir.`,
     lat: row.latitude, lon: row.longitude,
-    nearbyKm: distanceKm(userPosition.lat, userPosition.lon, row.latitude, row.longitude),
+    nearbyKm: Number.isFinite(Number(databaseDistanceM)) ? Number(databaseDistanceM) / 1000 : distanceKm(userPosition.lat, userPosition.lon, row.latitude, row.longitude),
     image: row.image_url || null, imageIsSpecific: Boolean(row.image_verified && row.image_url),
     imageAttribution: row.image_credit || '', imageLicense: row.image_license || '',
     imageSourceUrl: row.image_source_url || '', imageGallery: [], wikipedia: row.wikipedia || '',
@@ -123,7 +123,7 @@ function normalizedRegionQuery(value) {
   return normalized(value).replace(/[,\s]+espana$/, '').trim();
 }
 
-async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
+async function databaseRoutes({ position, place, scope, offset, limit, radius }) {
   const supabase = getSupabaseAdmin();
   if (scope === 'province' && place) {
     const { data: regions, error: regionError } = await supabase.from('route_import_regions').select('code,community,province,status,last_completed_at');
@@ -131,42 +131,29 @@ async function databaseRoutes({ position, bbox, place, scope, offset, limit }) {
     const needle = normalizedRegionQuery(place);
     const region = (regions || []).find(item => normalized(item.province) === needle || normalized(item.community) === needle);
     if (!region || region.status !== 'ready') return { ready: false, routes: [] };
-    const memberships = [];
-    const batchSize = 1000;
-    for (let from = 0; ; from += batchSize) {
-      const { data, error } = await supabase.from('hiking_route_regions')
-        .select('route_id,hiking_routes!inner(*)')
-        .eq('region_code', region.code).eq('published', true).eq('hiking_routes.published', true)
-        .order('route_id').range(from, from + batchSize - 1);
-      if (error) throw error;
-      memberships.push(...(data || []));
-      if (!data || data.length < batchSize) break;
-    }
-    const routes = memberships.map(item => storedRoute(item.hiking_routes, position)).filter(hasRequiredMetrics)
-      .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
+    const { data, error } = await supabase.rpc('search_hiking_routes_postgis', {
+      p_lat: position.lat, p_lon: position.lon, p_radius_m: radius,
+      p_region_code: region.code, p_offset: offset, p_limit: limit,
+    });
+    if (error) throw error;
+    const routes = (data || []).map(item => storedRoute(item.route, position, item.distance_m));
+    const total = Number(data?.[0]?.total_count || 0);
     return {
       ready: routes.length > 0,
-      routes: routes.slice(offset, offset + limit),
-      total: routes.length,
-      nextCursor: offset + limit < routes.length ? String(offset + limit) : null,
+      routes,
+      total,
+      nextCursor: offset + routes.length < total ? String(offset + routes.length) : null,
       region,
     };
   }
-  const [south, west, north, east] = bbox.split(',').map(Number);
-  const rows = [];
-  const batchSize = 1000;
-  for (let from = 0; ; from += batchSize) {
-    const { data, error } = await supabase.from('hiking_routes').select('*')
-      .eq('published', true).gte('latitude', south).lte('latitude', north)
-      .gte('longitude', west).lte('longitude', east)
-      .order('id').range(from, from + batchSize - 1);
-    if (error) throw error;
-    rows.push(...(data || []));
-    if (!data || data.length < batchSize) break;
-  }
-  const routes = rows.map(row => storedRoute(row, position)).filter(hasRequiredMetrics)
-    .sort((a, b) => a.nearbyKm - b.nearbyKm || a.name.localeCompare(b.name, 'es'));
-  return { ready: routes.length > 0, routes: routes.slice(offset, offset + limit), total: routes.length, nextCursor: offset + limit < routes.length ? String(offset + limit) : null };
+  const { data, error } = await supabase.rpc('search_hiking_routes_postgis', {
+    p_lat: position.lat, p_lon: position.lon, p_radius_m: radius,
+    p_region_code: null, p_offset: offset, p_limit: limit,
+  });
+  if (error) throw error;
+  const routes = (data || []).map(item => storedRoute(item.route, position, item.distance_m));
+  const total = Number(data?.[0]?.total_count || 0);
+  return { ready: routes.length > 0, routes, total, nextCursor: offset + routes.length < total ? String(offset + routes.length) : null };
 }
 
 function normalize(element, userPosition) {
@@ -257,7 +244,7 @@ export async function GET(request) {
     const lonDelta = radius / (111000 * Math.max(.2, Math.cos(position.lat * Math.PI / 180)));
     const bbox = [position.lat - latDelta, position.lon - lonDelta, position.lat + latDelta, position.lon + lonDelta].join(',');
     try {
-      const stored = await databaseRoutes({ position, bbox, place, scope: params.get('scope'), offset, limit });
+      const stored = await databaseRoutes({ position, place, scope: params.get('scope'), offset, limit, radius });
       if (stored.ready) return NextResponse.json({ ...stored, position, searchLabel: geocoded?.label || '', attribution: 'Catálogo nacional Encúmbrate · © OpenStreetMap contributors', updatedAt: new Date().toISOString(), catalogSource: 'supabase' }, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } });
     } catch (databaseError) {
       console.error('Persistent route catalog lookup failed; using live fallback', databaseError);
