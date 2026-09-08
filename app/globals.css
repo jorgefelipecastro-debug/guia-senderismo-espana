@@ -761,7 +761,7 @@ button {
 .trainingSheet {
   padding: 26px 20px;
 }
-.trainingSheet > button {
+.trainingSheet > button:first-child {
   position: absolute;
   right: 15px;
   top: 12px;
