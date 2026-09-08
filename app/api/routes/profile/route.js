@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
+import { recordServerError } from '../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,7 +96,7 @@ export async function GET(request) {
     } catch (persistError) { console.error('Route profile persistence failed', persistError); }
     return NextResponse.json({ found: true, distanceKm: distanceRounded, ascentM, maxAltitudeM, minAltitudeM, duration: duration(minutes), source: heights.length ? 'Calculado con el trazado OpenStreetMap y el modelo de elevación Open-Meteo' : 'Calculado con el trazado OpenStreetMap', calculated: true }, { headers: { 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000' } });
   } catch (error) {
-    console.error('Route profile lookup failed', error);
+    await recordServerError(error,{route:'/api/routes/profile'});
     return NextResponse.json({ found: false, error: 'No hemos podido calcular ahora el perfil de esta ruta.' }, { status: 503 });
   }
 }

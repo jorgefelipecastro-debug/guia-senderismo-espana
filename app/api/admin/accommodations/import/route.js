@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { fetchRegionAccommodations, normalizeAccommodation } from "../../../../../lib/accommodation-import";
+import { recordServerError } from "../../../../../lib/monitoring";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -66,7 +67,7 @@ export async function GET(request) {
     }
     return NextResponse.json({ done: imported.length < batch, imported });
   } catch (error) {
-    console.error("Accommodation import failed", error);
+    await recordServerError(error,{route:"/api/admin/accommodations/import",severity:"critical"});
     return NextResponse.json({ error: error.message, imported }, { status: 502 });
   }
 }

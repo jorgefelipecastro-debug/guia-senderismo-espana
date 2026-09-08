@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
+import { recordServerError } from '../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,7 +78,7 @@ export async function GET(request) {
     if (!lines.length) throw new Error('Empty route geometry');
     return new NextResponse(traceSvg(lines, stored?.source || 'OSM'), { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } });
   } catch (error) {
-    console.error('Route trace lookup failed', error);
+    await recordServerError(error,{route:'/api/routes/trace'});
     return NextResponse.json({ error: 'No hemos podido dibujar ahora el trazado.' }, { status: 503 });
   }
 }

@@ -2725,3 +2725,4 @@ button {
   z-index: 20;
 }
 .historyMore{display:block;width:min(360px,calc(100% - 32px));margin:18px auto;padding:13px;border:1px solid #aac4b8;border-radius:13px;background:#fff;color:#07543d;font-weight:900}.historyMore:disabled{opacity:.6}
+.fatalError{display:grid;place-content:center;min-height:100vh;padding:24px;background:#edf2ee;color:#173f34;text-align:center}.fatalError button{margin:auto;padding:12px 18px;border:0;border-radius:10px;background:#08704e;color:#fff;font-weight:900}

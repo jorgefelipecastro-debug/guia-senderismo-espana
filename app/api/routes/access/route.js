@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { recordServerError } from '../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -164,7 +165,7 @@ export async function GET(request) {
       note: 'Aparcamiento y punto de acceso calculados con datos públicos de OpenStreetMap. Comprueba señales, horarios y disponibilidad al llegar.',
     }, { headers: { 'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800' } });
   } catch (error) {
-    console.error('Route access lookup failed', error);
+    await recordServerError(error,{route:'/api/routes/access'});
     return NextResponse.json({ error: 'No hemos podido comprobar ahora el acceso y el aparcamiento de esta ruta.' }, { status: 503 });
   }
 }

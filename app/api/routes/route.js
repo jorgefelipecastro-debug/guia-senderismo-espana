@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { findCuratedRoute } from '../../../lib/route-curation';
 import { getSupabaseAdmin } from '../../../lib/supabase-admin';
 import { hasRequiredMetrics } from '../../../lib/route-quality';
+import { recordServerError } from '../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -247,7 +248,7 @@ export async function GET(request) {
       const stored = await databaseRoutes({ position, place, scope: params.get('scope'), offset, limit, radius });
       if (stored.ready) return NextResponse.json({ ...stored, position, searchLabel: geocoded?.label || '', attribution: 'Catálogo nacional Encúmbrate · © OpenStreetMap contributors', updatedAt: new Date().toISOString(), catalogSource: 'supabase' }, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } });
     } catch (databaseError) {
-      console.error('Persistent route catalog lookup failed; using live fallback', databaseError);
+      void recordServerError(databaseError,{route:'/api/routes',severity:'warning'});
     }
     const provinceAreaId = params.get('scope') === 'province' && geocoded?.osmType === 'relation' && geocoded.osmId ? 3600000000 + geocoded.osmId : null;
     const query = provinceAreaId
@@ -259,7 +260,7 @@ export async function GET(request) {
     const page = routes.slice(offset,offset+limit);
     return NextResponse.json({ routes: page, total: routes.length, nextCursor: offset+page.length<routes.length?String(offset+page.length):null, position, searchLabel: geocoded?.label || '', attribution: '© OpenStreetMap contributors · Importación nacional pendiente para esta zona', updatedAt: new Date().toISOString(), catalogSource: 'live-fallback' }, { headers: { 'Cache-Control': 'public, s-maxage=21600, stale-while-revalidate=86400' } });
   } catch (error) {
-    console.error('Route catalog lookup failed', error);
+    await recordServerError(error,{route:'/api/routes'});
     return NextResponse.json({ routes: [], position, attribution: 'Fuente de rutas temporalmente no disponible', error: 'No hemos podido consultar ahora el catálogo público de rutas.' }, { status: 503 });
   }
 }

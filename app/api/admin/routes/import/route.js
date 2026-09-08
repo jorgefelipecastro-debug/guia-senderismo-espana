@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '../../../../../lib/supabase-admin';
 import { fetchRegionRoutes, normalizeNationalRoute, resolveRegionArea } from '../../../../../lib/national-routes';
+import { recordServerError } from '../../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -54,7 +55,7 @@ export async function POST(request) {
       supabase.from('route_import_regions').update({ status: 'error', last_error: message }).eq('code', region.code),
       supabase.from('route_import_runs').update({ status: 'error', error_message: message, completed_at: new Date().toISOString() }).eq('id', run.id),
     ]);
-    console.error('National route import failed', region.code, error);
+    await recordServerError(error,{route:'/api/admin/routes/import',severity:'critical'});
     return NextResponse.json({ error: message, region: region.province }, { status: 502 });
   }
 }

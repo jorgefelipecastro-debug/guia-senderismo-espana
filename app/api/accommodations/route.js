@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
+import { recordServerError } from "../../../lib/monitoring";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,7 @@ export async function GET(request) {
       { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=86400" } },
     );
   } catch (error) {
-    console.error("Accommodation catalog lookup failed", error);
+    await recordServerError(error,{route:"/api/accommodations"});
     return NextResponse.json(
       { error: "No se ha podido consultar el catálogo de alojamientos en este momento." },
       { status: 503 },
