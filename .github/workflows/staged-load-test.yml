@@ -1,0 +1,38 @@
+name: Prueba escalonada de carga
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tests/load/staged-load-test.js
+      - .github/workflows/staged-load-test.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: encumbrate-production-load-test
+  cancel-in-progress: false
+
+jobs:
+  staged-load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Comprobar salud previa
+        run: curl --fail --silent --show-error --retry 3 https://www.encumbrate.es/api/health
+      - name: Ejecutar 100, 250, 500 y 1000 usuarios virtuales
+        run: k6 run tests/load/staged-load-test.js
+        env:
+          TARGET_URL: https://www.encumbrate.es
+      - name: Guardar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encumbrate-staged-load-results
+          path: load-test-results.json
+          if-no-files-found: error
+          retention-days: 30
