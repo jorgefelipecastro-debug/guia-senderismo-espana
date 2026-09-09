@@ -1,5 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {continuousHeading,headingSourceAvailable,isHeadingStale} from '../app/compassMath.js';
+
+test('la animación cruza el norte sin dar una vuelta completa en ambos sentidos',()=>{
+ assert.equal(continuousHeading(359,1),361);
+ assert.equal(continuousHeading(1,359),-1);
+ let rotation=350;
+ for(let i=351;i<=1080;i++){
+  const next=continuousHeading(rotation,i%360);
+  assert.equal(next-rotation,1);
+  rotation=next;
+ }
+});
+
+test('las lecturas vacías no se convierten en un norte falso',()=>{
+ for(const value of [null,undefined,NaN,Infinity,'0'])assert.equal(headingFromDeviceOrientation(value),null);
+});
+
+test('recupera el sensor alternativo cuando se interrumpe el avanzado',()=>{
+ assert.equal(headingSourceAvailable('Sensor Android avanzado','Sensor Android',100,1000),false);
+ assert.equal(headingSourceAvailable('Sensor Android avanzado','Sensor Android',100,1700),true);
+ assert.equal(headingSourceAvailable('Sensor Android','Sensor Android avanzado',1700,1750),true);
+});
+
+test('detecta interrupción y recuperación sin dar por válida una lectura antigua',()=>{
+ assert.equal(isHeadingStale(null,5000),false);
+ assert.equal(isHeadingStale(100,1500),false);
+ assert.equal(isHeadingStale(100,1700),true);
+ assert.equal(isHeadingStale(1700,1750),false);
+});
 import {adaptiveHeading,angleDifference,calibrationWarning,circularMean,circularSpread,COMPASS_TUNING,headingFromDeviceOrientation,headingFromQuaternion,headingSampleDecision,isCoherentHeadingMotion,nextCalibrationState,normalizeHeading,robustCircularMean,shouldUseHeadingSource,smoothHeading} from '../app/compassMath.js';
 
 test('normaliza cualquier rumbo al intervalo de la brújula',()=>{

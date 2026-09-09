@@ -114,3 +114,16 @@ export function headingFromQuaternion(quaternion){
  if(Math.hypot(east,north)<.25)return null;
  return normalizeHeading(Math.atan2(east,north)*180/Math.PI);
 }
+
+// Keep CSS rotation continuous when crossing north instead of animating 358°.
+export function continuousHeading(previous,heading){
+ return Number.isFinite(previous)?previous+angleDifference(heading,normalizeHeading(previous)):heading;
+}
+
+export function headingSourceAvailable(currentSource,nextSource,lastReadingAt,now){
+ return shouldUseHeadingSource(currentSource,nextSource)||now-lastReadingAt>1500;
+}
+
+export function isHeadingStale(lastReadingAt,now){
+ return lastReadingAt!==null&&now-lastReadingAt>1500;
+}
