@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import AuthGate from './AuthGate';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 import ClientMonitoring from './ClientMonitoring';
+import SettingsRuntime from './SettingsRuntime';
 
 export const metadata = {
   title: 'Encúmbrate | Senderismo inteligente',
@@ -37,6 +38,7 @@ export default function RootLayout({ children }) {
     <html lang="es">
       <body>
         <ClientMonitoring />
+        <SettingsRuntime />
         <ServiceWorkerRegister />
         <AuthGate>{children}</AuthGate>
         <footer className="globalLegalLinks">
