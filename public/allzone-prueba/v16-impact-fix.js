@@ -1,11 +1,13 @@
-/* Allzone V16.4.8 - normalized vehicle impact coordinates */
+/* Allzone V16.4.9 - normalized vehicle impact coordinates + red rings */
 (function(){
 'use strict';
 if(window.AllzoneImpactFix)return;
 
-const VERSION='V16.4.8 · IMPACTOS NORMALIZADOS';
+const VERSION='V16.4.9 · AROS DE IMPACTO';
 const EDIT_W=430;
 const EDIT_H=330;
+const RING_RADIUS=17;
+const RING_STROKE=5.5;
 
 const clamp=v=>Math.max(0,Math.min(1,Number(v)||0));
 
@@ -41,11 +43,31 @@ function pixels(key,w,h){
   return normalized(key).map(p=>[p[0]*w,p[1]*h]);
 }
 
+function drawImpactRings(ctx,pts){
+  (pts||[]).forEach((pt,idx)=>{
+    const px=Number(pt?.[0])||0,py=Number(pt?.[1])||0;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(px,py,RING_RADIUS,0,Math.PI*2);
+    ctx.strokeStyle='#d92d20';
+    ctx.lineWidth=RING_STROKE;
+    ctx.stroke();
+    ctx.fillStyle='#d92d20';
+    ctx.font='900 13px Arial';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(String(idx+1),px,py+0.5);
+    ctx.restore();
+  });
+}
+
+window.renderImpactMarkers=drawImpactRings;
+
 function drawImpactCanvas(ctx,key,type,label,w,h){
   ctx.clearRect(0,0,w,h);
   ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
   technicalVehicle(ctx,type,w,h,label);
-  renderImpactMarkers(ctx,pixels(key,w,h));
+  drawImpactRings(ctx,pixels(key,w,h));
 }
 
 window.impactScreen=function(side){
@@ -53,13 +75,13 @@ window.impactScreen=function(side){
   const type=state[side.toLowerCase()+'_vehicle_type']||'Coche';
   let appendMode=false;
   normalized(key);
-  host.innerHTML=`<div class="eyebrow">Vehículo ${side}</div><h1>Indica el punto de impacto</h1><p class="lead">Toca la zona del primer contacto. Si hay varios impactos, pulsa <b>Agregar punto</b> y marca cada uno.</p><div class="card"><div class="impact-wrap"><canvas class="impact" id="impactCanvas" width="${EDIT_W}" height="${EDIT_H}"></canvas></div><div class="impact-counter"><span id="impactCounter"></span><span id="impactModeMsg">El siguiente toque actualizará el último punto.</span></div><div class="impact-actions"><button type="button" class="pillbtn" id="addImpact">Agregar punto</button><button type="button" class="pillbtn" id="undoImpact">Eliminar último</button><button type="button" class="pillbtn fullbtn" id="clearImpact">Borrar todos los puntos</button></div><div class="impact-help">El punto 1 es el impacto inicial. La posición se conserva proporcionalmente para que salga exactamente en el mismo lugar del parte final.</div></div>`;
+  host.innerHTML=`<div class="eyebrow">Vehículo ${side}</div><h1>Indica el punto de impacto</h1><p class="lead">Toca la zona del primer contacto. Si hay varios impactos, pulsa <b>Agregar punto</b> y marca cada uno.</p><div class="card"><div class="impact-wrap"><canvas class="impact" id="impactCanvas" width="${EDIT_W}" height="${EDIT_H}"></canvas></div><div class="impact-counter"><span id="impactCounter"></span><span id="impactModeMsg">El siguiente toque actualizará el último aro.</span></div><div class="impact-actions"><button type="button" class="pillbtn" id="addImpact">Agregar punto</button><button type="button" class="pillbtn" id="undoImpact">Eliminar último</button><button type="button" class="pillbtn fullbtn" id="clearImpact">Borrar todos los puntos</button></div><div class="impact-help">Cada daño se marca con un aro rojo numerado. Puedes recolocarlo igual que antes tocando la nueva zona; no se utilizan flechas.</div></div>`;
   const c=document.getElementById('impactCanvas'),ctx=c.getContext('2d');
   function draw(){
     drawImpactCanvas(ctx,key,type,side,c.width,c.height);
     const n=normalized(key).length;
     const counter=document.getElementById('impactCounter');if(counter)counter.textContent=`Puntos marcados: ${n}`;
-    const msg=document.getElementById('impactModeMsg');if(msg)msg.textContent=appendMode?'El próximo toque añadirá un nuevo punto.':'El siguiente toque actualizará el último punto.';
+    const msg=document.getElementById('impactModeMsg');if(msg)msg.textContent=appendMode?'El próximo toque añadirá un nuevo aro.':'El siguiente toque actualizará el último aro.';
     document.getElementById('addImpact')?.classList.toggle('active',appendMode);
   }
   c.addEventListener('pointerdown',e=>{
@@ -100,5 +122,5 @@ window.prepPrint=function(){
 };
 
 const banner=document.querySelector('.v16-banner');if(banner)banner.textContent=VERSION;
-window.AllzoneImpactFix={version:VERSION,normalized,pixels};
+window.AllzoneImpactFix={version:VERSION,normalized,pixels,ringRadius:RING_RADIUS,ringStroke:RING_STROKE};
 })();
