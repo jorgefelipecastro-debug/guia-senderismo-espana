@@ -1,8 +1,8 @@
-/* Allzone V16.4.12 - bottom button sends final DAA, then becomes Exit */
+/* Allzone V16.4.13 - single-use claim, clean final review, send then exit */
 (function(){
 'use strict';
 if(window.AllzoneClaimEmail)return;
-const VERSION='V16.4.12 · ENVIAR Y SALIR';
+const VERSION='V16.4.13 · PARTE UNICO';
 const FLEET='flota@allzonelogistics.com';
 let sending=false;
 let sent={fleet:false,counterpart:false};
@@ -42,13 +42,24 @@ function decorateDelivery(){
   if(fixed){fixed.textContent=FLEET;fixed.setAttribute('aria-label','Correo fijo del departamento de Flota');}
 }
 
+function cleanFinalActions(){
+  if(currentTitle()!=='Revisión')return;
+  host.querySelector('.v16-review')?.remove();
+  host.querySelectorAll('.v162-review,.double-actions,#v163PdfCard').forEach(n=>{
+    const card=n.closest('.card');
+    (card||n).remove();
+  });
+}
+
 function panel(){
   const mail=state.b_copy_email||'';
-  return `<section class="v1646-send"><h3>Envío automático del parte</h3><div class="v1646-recipient"><b>Flota</b><span id="v1646FleetRecipient">${FLEET}${sent.fleet?' · ✓ enviado':''}</span></div><div class="v1646-recipient"><b>Vehículo B</b><span id="v1646CounterpartRecipient">${safe(mail)||'Correo pendiente'}${sent.counterpart?' · ✓ enviado':''}</span></div><div id="v1646Status" class="v1646-status">Se enviará exactamente el mismo PDF de una página a ambos destinatarios. Las fotos no se adjuntan.</div></section>`;
+  return `<section class="v1646-send"><h3>Envío automático del parte</h3><div class="v1646-recipient"><b>Flota</b><span id="v1646FleetRecipient">${FLEET}${sent.fleet?' · ✓ enviado':''}</span></div><div class="v1646-recipient"><b>Vehículo B</b><span id="v1646CounterpartRecipient">${safe(mail)||'Correo pendiente'}${sent.counterpart?' · ✓ enviado':''}</span></div><div id="v1646Status" class="v1646-status">Al pulsar TERMINAR Y ENVIAR se generará el PDF final y se enviará a ambos destinatarios. Este parte es de un solo uso.</div></section>`;
 }
 
 function decorateReview(){
   if(currentTitle()!=='Revisión')return;
+  cleanFinalActions();
+  const lead=host.querySelector('p.lead');if(lead)lead.textContent='Comprueba los datos. Las opciones de fotos y PDF ya están disponibles en pantallas anteriores; aquí solo falta enviar el parte.';
   if(!document.getElementById('v1646Status'))host.insertAdjacentHTML('beforeend',panel());
   const mail=String(state.b_copy_email||'').trim();
   const fleet=document.getElementById('v1646FleetRecipient');
@@ -60,6 +71,7 @@ function decorateReview(){
     window.nextBtn.onclick=()=>allSent()?exitApplication():sendFinal();
     window.nextBtn.disabled=sending;
   }
+  setTimeout(cleanFinalActions,0);
 }
 
 async function sendTarget(target,pdf,filename){
