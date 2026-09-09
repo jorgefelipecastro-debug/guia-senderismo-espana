@@ -9,6 +9,7 @@ import RouteSubmissionGuide from "./RouteSubmissionGuide";
 import CompassTools from "./CompassTools";
 import RouteMapExplorer from "./RouteMapExplorer";
 import RoutePreparation from "./RoutePreparation";
+import { readSettings } from "../lib/app-settings";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -313,6 +314,14 @@ export default function RouteCatalog() {
     [activeSearch, setActiveSearch] = useState(null),
     [moreLoading, setMoreLoading] = useState(false),
     [mapOpen, setMapOpen] = useState(false);
+  const [maxDistance, setMaxDistance] = useState(0);
+  useEffect(() => {
+    const sync = () => { const settings = readSettings(); setLevel(settings.level); setMaxDistance(settings.maxDistance); };
+    sync();
+    window.addEventListener('encumbrate:settings', sync);
+    window.addEventListener('storage', sync);
+    return () => { window.removeEventListener('encumbrate:settings', sync); window.removeEventListener('storage', sync); };
+  }, []);
   useEffect(() => {
     let active = true;
     const load = (position) => {
@@ -484,12 +493,13 @@ export default function RouteCatalog() {
       routes.filter(
         (route) =>
           (level === "todas" || route.level === level) &&
+          (!maxDistance || (Number.isFinite(route.distanceKm) && route.distanceKm <= maxDistance)) &&
           (!query.trim() ||
             `${route.name} ${route.ref}`
               .toLocaleLowerCase("es")
               .includes(query.trim().toLocaleLowerCase("es"))),
       ),
-    [routes, query, level],
+    [routes, query, level, maxDistance],
   );
   const nearest = routes.slice(0, 3);
   return (
