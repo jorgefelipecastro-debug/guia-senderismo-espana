@@ -9,6 +9,7 @@ import RouteSubmissionGuide from "./RouteSubmissionGuide";
 import CompassTools from "./CompassTools";
 import RouteMapExplorer from "./RouteMapExplorer";
 import RoutePreparation from "./RoutePreparation";
+import Weather from "./Weather";
 import { readSettings } from "../lib/app-settings";
 import {
   bearingDegrees,
@@ -976,6 +977,7 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
           </div>
         </div>
         <RouteAccess route={route} />
+        <Weather key={route.id} route={route} />
         </section>
         <section className="routeTrailState" aria-label="Estado del sendero">
           <h2>Estado del sendero</h2>
