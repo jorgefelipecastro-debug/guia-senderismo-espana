@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {weatherCoordinates,weatherLabel,weatherAdvice,validWeatherCache,daylightHours} from '../lib/weather';
 import './weather.css';
+import WeatherHomeCard from './WeatherHomeCard';
 
 const format = (value,unit='') => Number.isFinite(value) ? `${Math.round(value*10)/10}${unit}` : '—';
 const clock = value => value?.slice(11,16) || '—';
@@ -10,11 +11,33 @@ function readCache(key) {try {const cache=JSON.parse(localStorage.getItem(CACHE)
 function saveCache(key,data) {try {const cache=JSON.parse(localStorage.getItem(CACHE)||'{}');cache[key]=data;const entries=Object.entries(cache).sort((a,b)=>Date.parse(b[1].fetchedAt)-Date.parse(a[1].fetchedAt)).slice(0,12);localStorage.setItem(CACHE,JSON.stringify(Object.fromEntries(entries)));} catch {}}
 
 export default function Weather({route}) {
-  const [place,setPlace]=useState(null),[open,setOpen]=useState(false),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[refresh,setRefresh]=useState(0);
+  const [place,setPlace]=useState(null),[open,setOpen]=useState(false),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[refresh,setRefresh]=useState(0),[locationError,setLocationError]=useState(''),[locationMode,setLocationMode]=useState('gps');
   const coordinates=route ? weatherCoordinates(route.lat,route.lon) : weatherCoordinates(place?.lat,place?.lon);
   const key=coordinates ? `${coordinates.lat},${coordinates.lon}` : '';
   const title=route ? 'Tiempo en esta ruta' : 'El tiempo para tu próxima salida';
-  useEffect(()=>{if(route)return;try {const saved=JSON.parse(sessionStorage.getItem('encumbrate:weather-place')||'null');if(weatherCoordinates(saved?.lat,saved?.lon))setPlace(saved);} catch {}},[route]);
+  useEffect(()=>{
+    if(route||locationMode!=='gps')return;
+    if(!navigator.geolocation){setLocationError('Tu navegador no permite localizarte. Elige una localidad.');return;}
+    let active=true,blocked=false,pending=false;
+    const locate=()=>{
+      if(!active||blocked||pending||document.visibilityState==='hidden')return;
+      pending=true;
+      navigator.geolocation.getCurrentPosition(position=>{
+        pending=false;if(!active)return;
+        const next=weatherCoordinates(position.coords.latitude,position.coords.longitude);
+        if(!next)return;
+        setLocationError('');
+        setPlace(previous=>previous?.lat===next.lat&&previous?.lon===next.lon?previous:{...next,name:'Tu ubicación actual'});
+      },failure=>{
+        pending=false;if(!active)return;
+        if(failure.code===1)blocked=true;
+        setLocationError(failure.code===1?'Permite la ubicación o elige una localidad.':'No se ha podido actualizar tu ubicación. Puedes elegir una localidad.');
+      },{enableHighAccuracy:false,maximumAge:120000,timeout:12000});
+    };
+    locate();const timer=setInterval(locate,300000);
+    document.addEventListener('visibilitychange',locate);
+    return()=>{active=false;clearInterval(timer);document.removeEventListener('visibilitychange',locate);};
+  },[route,locationMode]);
   useEffect(()=>{
     if(!key){setData(null);return;}
     const controller=new AbortController();let active=true;
@@ -23,13 +46,14 @@ export default function Weather({route}) {
     fetch(`/api/weather?lat=${coordinates.lat}&lon=${coordinates.lon}`,{signal:controller.signal}).then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error);if(!Array.isArray(result.hours)||!result.days?.length)throw new Error('Previsión incompleta.');if(active){setData(result);saveCache(key,result);}}).catch(error=>{if(active)setError(error.name==='AbortError'?'AEMET está tardando demasiado. Vuelve a intentarlo.':error.message||'No se pudo actualizar la previsión.');}).finally(()=>{clearTimeout(timeout);if(active)setLoading(false);});
     return()=>{active=false;clearTimeout(timeout);controller.abort();};
   },[key,refresh]);
-  function choosePlace(value){setPlace(value);try {sessionStorage.setItem('encumbrate:weather-place',JSON.stringify(value));}catch {}}
-  return <section className="weatherCard" aria-label={title}>
+  function choosePlace(value){setLocationError('');setLocationMode(value.name==='Mi ubicación aproximada'?'gps':'manual');setPlace(value);}
+  return <>{!route?<WeatherHomeCard data={data} place={place} loading={loading} error={error||locationError} onOpen={()=>setOpen(true)} onRefresh={()=>setRefresh(n=>n+1)}/>:<section className="weatherCard" aria-label={title}>
     <button className="weatherEntry" onClick={()=>setOpen(true)}><span><small>{title}</small><strong>{data ? `${format(data.current.temperature,'°')} · ${weatherLabel(data.current.code)}` : loading ? 'Consultando previsión…' : route ? 'Consultar previsión' : 'Elige ubicación o localidad'}</strong><span>{route?.name || place?.name || 'Prepara tu salida con el tiempo previsto'}</span></span><span aria-hidden="true">☀ ↗</span></button>
     {data&&<small>Viento {format(data.current.wind,' km/h')} · Lluvia {data.days[0]?.date}: {format(data.days[0]?.rainProbability,'%')} · Consulta: {new Date(data.fetchedAt).toLocaleString('es-ES')}{Date.now()-Date.parse(data.fetchedAt)>10800000?' · Previsión antigua: actualiza antes de salir.':''}</small>}
     {error&&<p role="status">{error}{data?' Se muestra la última previsión guardada.':''}</p>}
+    </section>}
     {open&&<WeatherDetail close={()=>setOpen(false)} route={route} place={place} choosePlace={choosePlace} data={data} error={error} loading={loading} retry={()=>setRefresh(n=>n+1)} hasCoordinates={!!key}/>}
-  </section>;
+  </>;
 }
 
 function WeatherDetail({close,route,place,choosePlace,data,error,loading,retry,hasCoordinates}) {
