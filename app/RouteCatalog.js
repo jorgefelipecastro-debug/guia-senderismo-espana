@@ -8,6 +8,7 @@ import RouteSubmission from "./RouteSubmission";
 import RouteSubmissionGuide from "./RouteSubmissionGuide";
 import CompassTools from "./CompassTools";
 import RouteMapExplorer from "./RouteMapExplorer";
+import RoutePreparation from "./RoutePreparation";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -944,6 +945,8 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
           </p>
         )}
         <p>{route.description}</p>
+        <section className="routePractical" aria-label="Información práctica">
+        <h2>Información práctica</h2>
         <div className="routeFacts">
           <div>
             <small>Nivel orientativo</small>
@@ -962,6 +965,19 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
             <strong>{route.network || "No publicada"}</strong>
           </div>
         </div>
+        <RouteAccess route={route} />
+        </section>
+        <section className="routeTrailState" aria-label="Estado del sendero">
+          <h2>Estado del sendero</h2>
+          <strong>Sin verificación reciente</strong>
+          <p>No disponemos de una revisión reciente de accesos, señalización o incidencias de este sendero. Esto no confirma que esté abierto o en buen estado.</p>
+          <details>
+            <summary>Qué comprobar antes de salir</summary>
+            <p>Consulta cierres y permisos con el gestor del espacio, la previsión meteorológica y posibles tramos afectados por obras, barro o daños. Las fuentes de agua y la sombra no están verificadas en esta ficha.</p>
+            {(route.officialUrl || route.sourceUrl) && <a href={route.officialUrl || route.sourceUrl} target="_blank" rel="noopener noreferrer">Consultar la fuente de la ruta ↗</a>}
+          </details>
+        </section>
+        <RoutePreparation key={route.id} route={shown} download={downloadOfflineRoute} readSaved={readOfflineRoute} />
         <button
           className="routeMeetupButton"
           onClick={() => onCreateMeetup(shown)}
@@ -969,8 +985,6 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
           ♧ Crear quedada para esta ruta
         </button>
         <button className="routeStayButton" onClick={() => window.dispatchEvent(new CustomEvent("encumbrate:open-accommodations", { detail: { lat: route.lat, lon: route.lon, label: route.name } }))}>⌂ Refugios y alojamientos cercanos</button>
-        <button className="routeMaterialButton" onClick={() => window.dispatchEvent(new CustomEvent("encumbrate:open-material", { detail: shown }))}>🎒 Preparar material para esta ruta</button>
-        <RouteAccess route={route} />
         <RouteGallery photos={photo.gallery || []} routeName={route.name} />
         <GpsRecorder route={route} previous={activity} onSaved={onSaved} />
         {photo.trace && (
