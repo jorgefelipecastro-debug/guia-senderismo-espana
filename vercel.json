@@ -1,4 +1,12 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/allzone-prueba/v16.html",
+      "permanent": false
+    }
+  ],
   "crons": [
     {
       "path": "/api/process-accreditation-emails",
