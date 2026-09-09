@@ -1,8 +1,8 @@
-/* Allzone V16.4.11 - send final one-page DAA to Fleet + counterpart, then exit */
+/* Allzone V16.4.12 - bottom button sends final DAA, then becomes Exit */
 (function(){
 'use strict';
 if(window.AllzoneClaimEmail)return;
-const VERSION='V16.4.11 · ENVIAR Y SALIR';
+const VERSION='V16.4.12 · ENVIAR Y SALIR';
 const FLEET='flota@allzonelogistics.com';
 let sending=false;
 let sent={fleet:false,counterpart:false};
@@ -10,7 +10,7 @@ let claimId='';
 
 const css=document.createElement('style');
 css.textContent=`
-.v1646-send{margin:10px 0;padding:12px;border:1px solid #cfe0dc;border-radius:12px;background:#fff}.v1646-send h3{margin:0 0 7px;font-size:15px}.v1646-recipient{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #edf1f0;font-size:12px}.v1646-recipient:last-of-type{border-bottom:0}.v1646-recipient b{color:#24443e}.v1646-recipient span{text-align:right;overflow-wrap:anywhere}.v1646-status{margin-top:8px;font-size:12px;line-height:1.45}.v1646-status.ok{color:#087f73;font-weight:800}.v1646-status.bad{color:#a32116;font-weight:800}.v1646-finish{width:100%;min-height:49px;border:0;border-radius:11px;background:#087f73;color:#fff;font-size:14px;font-weight:900;margin-top:9px}.v1646-finish:disabled{opacity:.55}`;
+.v1646-send{margin:10px 0;padding:12px;border:1px solid #cfe0dc;border-radius:12px;background:#fff}.v1646-send h3{margin:0 0 7px;font-size:15px}.v1646-recipient{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #edf1f0;font-size:12px}.v1646-recipient:last-of-type{border-bottom:0}.v1646-recipient b{color:#24443e}.v1646-recipient span{text-align:right;overflow-wrap:anywhere}.v1646-status{margin-top:8px;font-size:12px;line-height:1.45}.v1646-status.ok{color:#087f73;font-weight:800}.v1646-status.bad{color:#a32116;font-weight:800}`;
 document.head.appendChild(css);
 
 function safe(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -19,16 +19,14 @@ function ensureClaimId(){if(claimId)return claimId;claimId='az-'+Date.now().toSt
 function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim());}
 function allSent(){return Boolean(sent.fleet&&sent.counterpart);}
 function status(msg,cls=''){const n=document.getElementById('v1646Status');if(n){n.textContent=msg;n.className='v1646-status '+cls;}}
-function setBusy(v){sending=v;const b=document.getElementById('v1646Finish');if(b)b.disabled=v;if(window.nextBtn&&currentTitle()==='Revisión')window.nextBtn.disabled=v;}
+function setBusy(v){sending=v;if(window.nextBtn&&currentTitle()==='Revisión')window.nextBtn.disabled=v;}
 
 function exitApplication(){
   if(!allSent())return;
   const root=window.top||window;
   try{root.close();}catch(_){ }
   setTimeout(()=>{
-    try{
-      if(root.history&&root.history.length>1){root.history.back();return;}
-    }catch(_){ }
+    try{if(root.history&&root.history.length>1){root.history.back();return;}}catch(_){ }
     try{root.location.replace('about:blank');}
     catch(_){try{window.location.replace('about:blank');}catch(__){ }}
   },120);
@@ -46,20 +44,22 @@ function decorateDelivery(){
 
 function panel(){
   const mail=state.b_copy_email||'';
-  return `<section class="v1646-send"><h3>Envío automático del parte</h3><div class="v1646-recipient"><b>Flota</b><span id="v1646FleetRecipient">${FLEET}${sent.fleet?' · ✓ enviado':''}</span></div><div class="v1646-recipient"><b>Vehículo B</b><span id="v1646CounterpartRecipient">${safe(mail)||'Correo pendiente'}${sent.counterpart?' · ✓ enviado':''}</span></div><button type="button" id="v1646Finish" class="v1646-finish">${allSent()?'SALIR':'TERMINAR Y ENVIAR PARTE'}</button><div id="v1646Status" class="v1646-status">Se enviará exactamente el mismo PDF de una página a ambos destinatarios. Las fotos no se adjuntan.</div></section>`;
+  return `<section class="v1646-send"><h3>Envío automático del parte</h3><div class="v1646-recipient"><b>Flota</b><span id="v1646FleetRecipient">${FLEET}${sent.fleet?' · ✓ enviado':''}</span></div><div class="v1646-recipient"><b>Vehículo B</b><span id="v1646CounterpartRecipient">${safe(mail)||'Correo pendiente'}${sent.counterpart?' · ✓ enviado':''}</span></div><div id="v1646Status" class="v1646-status">Se enviará exactamente el mismo PDF de una página a ambos destinatarios. Las fotos no se adjuntan.</div></section>`;
 }
 
 function decorateReview(){
   if(currentTitle()!=='Revisión')return;
-  if(!document.getElementById('v1646Finish'))host.insertAdjacentHTML('beforeend',panel());
+  if(!document.getElementById('v1646Status'))host.insertAdjacentHTML('beforeend',panel());
   const mail=String(state.b_copy_email||'').trim();
   const fleet=document.getElementById('v1646FleetRecipient');
   const counterpart=document.getElementById('v1646CounterpartRecipient');
   if(fleet)fleet.textContent=FLEET+(sent.fleet?' · ✓ enviado':'');
   if(counterpart)counterpart.textContent=(mail||'Correo pendiente')+(sent.counterpart?' · ✓ enviado':'');
-  const b=document.getElementById('v1646Finish');
-  if(b){b.textContent=allSent()?'SALIR':'TERMINAR Y ENVIAR PARTE';b.onclick=()=>allSent()?exitApplication():sendFinal();b.disabled=sending;}
-  if(window.nextBtn){window.nextBtn.textContent=allSent()?'SALIR':'TERMINAR Y ENVIAR';window.nextBtn.onclick=()=>allSent()?exitApplication():sendFinal();window.nextBtn.disabled=sending;}
+  if(window.nextBtn){
+    window.nextBtn.textContent=allSent()?'SALIR':'TERMINAR Y ENVIAR';
+    window.nextBtn.onclick=()=>allSent()?exitApplication():sendFinal();
+    window.nextBtn.disabled=sending;
+  }
 }
 
 async function sendTarget(target,pdf,filename){
