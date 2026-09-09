@@ -1,8 +1,8 @@
-/* Allzone V16.4.7 - reliable one-page PDF preview on mobile */
+/* Allzone V16.4.13 - one-page PDF generator; controls only before final review */
 (function(){
 'use strict';
 if(window.AllzonePdfPreview)return;
-const VERSION='V16.4.7 - VISTA PREVIA PDF MOVIL';
+const VERSION='V16.4.13 - PDF FINAL';
 let libsPromise=null;
 let currentUrl='';
 let currentBlob=null;
@@ -71,9 +71,8 @@ function fallbackPrintPreview(){
   }catch(err){alert('No se pudo abrir la vista previa del documento.');}
 }
 function controls(){return `<section class="v163-card" id="v163PdfCard"><h2>Documento final en PDF</h2><p>El PDF final contiene solo la copia del parte: una unica pagina. Las fotografias se gestionan y se envian por separado.</p><div class="v163-actions"><button type="button" class="v163-btn" data-v163-action id="v163PreviewBtn">VISTA PREVIA DEL PDF</button><button type="button" class="v163-btn alt" data-v163-action id="v163DownloadBtn">DESCARGAR PDF FINAL</button></div><div id="v163Status" class="v163-status"></div><div id="v163PreviewWrap" class="v163-preview-wrap"><div id="v163PreviewLoading" class="v163-preview-loading">Preparando vista previa...</div><img id="v163PreviewImage" class="v163-preview-page" alt="Vista previa de la unica pagina del parte final" style="display:none"><div class="v163-preview-caption">Esta imagen corresponde exactamente a la pagina utilizada para generar el PDF final.</div></div></section>`;}
-function inject(){const title=getSteps?.()[idx]?.title||'';if(title!=='Entrega'&&title!=='Revisión')return;if(document.getElementById('v163PdfCard'))return;host.insertAdjacentHTML('beforeend',controls());document.getElementById('v163PreviewBtn').onclick=showPreview;document.getElementById('v163DownloadBtn').onclick=downloadPdf;}
+function inject(){const title=getSteps?.()[idx]?.title||'';if(title!=='Entrega')return;if(document.getElementById('v163PdfCard'))return;host.insertAdjacentHTML('beforeend',controls());document.getElementById('v163PreviewBtn').onclick=showPreview;document.getElementById('v163DownloadBtn').onclick=downloadPdf;}
 const priorRender=window.render;window.render=function(){revoke();priorRender();const b=document.querySelector('.v16-banner');if(b)b.textContent=VERSION;document.title='Allzone '+VERSION;setTimeout(inject,0);};
-const priorReview=window.reviewScreen;window.reviewScreen=function(){priorReview?.();setTimeout(inject,0);};
 window.addEventListener('pagehide',revoke);
 window.AllzonePdfPreview={version:VERSION,buildPdfBlob,showPreview,downloadPdf,get previewSrc(){return currentPreviewSrc;}};
 window.render();
