@@ -1,7 +1,10 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { rateLimitPolicy, clientAddress } from "./lib/api-rate-limit";
 import { getSupabaseAdmin } from "./lib/supabase-admin";
+
+const localBuckets = globalThis.__allzoneLocalRateBuckets || new Map();
+globalThis.__allzoneLocalRateBuckets = localBuckets;
 
 function fingerprint(value) {
   const secret = process.env.RATE_LIMIT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -31,17 +34,45 @@ function limitedResponse(result) {
   );
 }
 
-export async function proxy(request) {
-  const policy = rateLimitPolicy(request.nextUrl.pathname, request.method);
-  const admin = getSupabaseAdmin();
-  let userHash = null;
-  const token = bearerToken(request);
-  if (token) {
-    const { data, error } = await admin.auth.getUser(token);
-    if (!error && data?.user?.id) userHash = fingerprint(`user:${data.user.id}`);
+function localFallbackRateLimit(request, policy) {
+  const now = Date.now();
+  const windowMs = Math.max(1, Number(policy.windowSeconds) || 60) * 1000;
+  const ip = clientAddress(request.headers);
+  const key = createHash("sha256").update(`${policy.scope}:${ip}`).digest("hex");
+  let bucket = localBuckets.get(key);
+  if (!bucket || now >= bucket.resetAt) bucket = { count: 0, resetAt: now + windowMs };
+  if (bucket.count >= policy.limit) {
+    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    return limitedResponse({
+      retry_after_seconds: retryAfter,
+      limit_value: policy.limit,
+    });
+  }
+  bucket.count += 1;
+  localBuckets.set(key, bucket);
+
+  if (localBuckets.size > 2000) {
+    for (const [bucketKey, value] of localBuckets) {
+      if (now >= value.resetAt) localBuckets.delete(bucketKey);
+    }
   }
 
+  return NextResponse.next();
+}
+
+export async function proxy(request) {
+  const pathname = request.nextUrl.pathname;
+  const policy = rateLimitPolicy(pathname, request.method);
+
   try {
+    const admin = getSupabaseAdmin();
+    let userHash = null;
+    const token = bearerToken(request);
+    if (token) {
+      const { data, error } = await admin.auth.getUser(token);
+      if (!error && data?.user?.id) userHash = fingerprint(`user:${data.user.id}`);
+    }
+
     const { data, error } = await admin.rpc("enforce_api_rate_limit", {
       p_scope: policy.scope,
       p_ip_hash: fingerprint(`ip:${clientAddress(request.headers)}`),
@@ -56,6 +87,14 @@ export async function proxy(request) {
     return NextResponse.next();
   } catch (error) {
     console.error("API rate limiter unavailable", error);
+
+    // The accident form is intentionally usable from a public QR. In preview
+    // environments Supabase may not be configured, so keep a best-effort
+    // per-instance limit instead of blocking the actual email endpoint.
+    if (pathname === "/api/allzone/send-claim") {
+      return localFallbackRateLimit(request, policy);
+    }
+
     if (policy.failClosed) {
       return NextResponse.json(
         { error: "El control de seguridad no está disponible. Inténtalo de nuevo en unos segundos." },
