@@ -9,3 +9,23 @@
 .weatherHomeBottom{padding:0 12px 2px;gap:8px}.weatherHomeBottom small{font-size:9px}.weatherHomeBottom button{font-size:11px;min-height:38px}
 @media(min-width:600px){.weatherHomeMain{min-height:112px}.weatherSky{right:14px;top:-12px;transform:scale(.58)}.weatherClock>strong{font-size:36px}}
 @media(max-width:360px){.weatherHomeMain{padding-left:12px!important;padding-right:12px!important}.weatherSky{right:0;transform:scale(.53)}.weatherClock>strong{font-size:34px}}
+/* Home only: roughly 60% of the compact card's previous height. */
+.weatherHomeSmall{border-radius:15px;margin:8px 0 12px}
+.weatherHomeSmall .weatherHomeTop{padding:0 9px}
+.weatherHomeSmall .weatherLocation{min-height:32px;font-size:12px!important}
+.weatherHomeSmall .weatherRefresh{width:32px;height:32px}
+.weatherHomeSmall .weatherHomeMain{min-height:52px;height:52px;padding:0 12px!important}
+.weatherHomeSmall .weatherClock{position:absolute;left:13px;top:5px}
+.weatherHomeSmall .weatherClock small{font-size:7px;letter-spacing:.5px}
+.weatherHomeSmall .weatherClock>strong{font-size:26px;letter-spacing:-1px}
+.weatherHomeSmall .weatherClock>span{display:none}
+.weatherHomeSmall .weatherSky{top:-2px;right:3px;transform:scale(.36);transform-origin:top right}
+.weatherHomeSmall .weatherHomeReading{position:absolute;left:42%;right:70px;top:7px;margin:0;display:block}
+.weatherHomeSmall .weatherHomeReading>div{display:block}
+.weatherHomeSmall .weatherHomeReading strong{font-size:24px}
+.weatherHomeSmall .weatherHomeReading strong>span{font-size:10px}
+.weatherHomeSmall .weatherHomeReading p{font-size:10px;margin-top:3px;white-space:nowrap}
+.weatherHomeSmall .weatherRange{display:none}
+.weatherHomeSmall .weatherHomeBottom{padding:0 10px;min-height:32px}
+.weatherHomeSmall .weatherHomeBottom button{min-height:32px;font-size:10px}
+.weatherHomeSmall .weatherHomeBottom small{font-size:8px}
