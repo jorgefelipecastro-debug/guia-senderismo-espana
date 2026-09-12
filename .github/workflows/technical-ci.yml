@@ -3,7 +3,7 @@ name: Technical CI
 on:
   push:
     branches:
-      - test/technical-ci-20260912
+      - main
   pull_request:
     branches:
       - main
