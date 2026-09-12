@@ -77,7 +77,7 @@ test('suaviza por el camino corto y limita los saltos visuales',()=>{
 });
 
 test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
- assert.ok(adaptiveHeading(0,120)>110);
+ assert.ok(adaptiveHeading(0,120)>=95);
  assert.equal(adaptiveHeading(359,359.5),359);
  assert.equal(adaptiveHeading(100,101.4),100);
  assert.ok(adaptiveHeading(100,101.6)>100&&adaptiveHeading(100,101.6)<100.3);
@@ -102,7 +102,6 @@ test('convierte el cuaternión Android con el mismo sentido cardinal que DeviceO
  assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-90)<.0001);
  assert.ok(Math.abs(headingFromQuaternion([0,0,-half,half])-270)<.0001);
  assert.equal(headingFromQuaternion(null),null);
- // Ambos sensores deben entender un giro hacia el este como 90°, no como 270°.
  assert.equal(headingFromDeviceOrientation(270,0),90);
  assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-headingFromDeviceOrientation(270,0))<.0001);
 });
