@@ -94,12 +94,15 @@ test('mantiene estable el estado ante ruido intermedio y recalibra solo si es al
  assert.equal(nextCalibrationState('stable',5,false),'calibrating');
 });
 
-test('convierte el cuaternión Android usando la parte superior del móvil',()=>{
+test('convierte el cuaternión Android con el mismo sentido cardinal que DeviceOrientation',()=>{
  const half=Math.SQRT1_2;
  assert.equal(headingFromQuaternion([0,0,0,1]),0);
- assert.ok(Math.abs(headingFromQuaternion([0,0,-half,half])-90)<.0001);
- assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-270)<.0001);
+ assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-90)<.0001);
+ assert.ok(Math.abs(headingFromQuaternion([0,0,-half,half])-270)<.0001);
  assert.equal(headingFromQuaternion(null),null);
+ // Ambos sensores deben entender un giro hacia el este como 90°, no como 270°.
+ assert.equal(headingFromDeviceOrientation(270,0),90);
+ assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-headingFromDeviceOrientation(270,0))<.0001);
 });
 
 test('convierte alpha absoluto y compensa la orientación visible de pantalla',()=>{
