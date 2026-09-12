@@ -19,6 +19,6 @@ test('la sesión web admite inicio y finalización diferidos',()=>{
 
 test('el service worker precarga la entrada y ofrece fallback de navegación',()=>{
  assert.match(worker,/APP_SHELL = \['\/'/);
- assert.match(worker,/cache\.match\('\/'\)/);
- assert.match(worker,/encumbrate-public-v14/);
+ assert.match(worker,/cache\.match\('\/offline\.html'\)/);
+ assert.match(worker,/encumbrate-public-v15/);
 });

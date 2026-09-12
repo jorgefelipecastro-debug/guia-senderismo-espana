@@ -1,6 +1,6 @@
 // Only anonymous, explicitly public application resources belong in CacheStorage.
-const CACHE_NAME = 'encumbrate-public-v14';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icon-192-v2.jpg', '/icon-512-v2.jpg', '/apple-touch-icon-v2.jpg'];
+const CACHE_NAME = 'encumbrate-public-v15';
+const APP_SHELL = ['/', '/manifest.webmanifest', '/icon-192-v2.jpg', '/icon-512-v2.jpg', '/apple-touch-icon-v2.jpg', '/offline.html', '/offline/viewer.mjs', '/offline/maps.mjs'];
 const MAX_ASSETS = 160;
 const ownedCache = name => /^encumbrate-(?:v\d+|public-v\d+)$/.test(name) || name === 'cumbre-v1';
 const canStore = response => response.status === 200 && !response.redirected &&
@@ -25,7 +25,11 @@ self.addEventListener('install', event => {
         });
         if (canStore(response) && (path !== '/' || /(?:^|,)\s*public(?:,|$)/i.test(response.headers.get('cache-control') || '')))
           await cache.put(path, response);
-      } catch { /* A failed precache must not prevent the privacy upgrade. */ }
+        else if (path.startsWith('/offline')) throw Error('Offline resources unavailable');
+      } catch (error) {
+        // Keep the previous protected worker if the new offline screen is incomplete.
+        if (path.startsWith('/offline')) throw error;
+      }
     }));
     await self.skipWaiting();
   })());
@@ -51,10 +55,21 @@ function saveAsset(request, response) {
   return writes.catch(() => {});
 }
 
+function navigationFetch(request) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  return fetch(request, {cache: 'no-store', signal: controller.signal}).finally(() => clearTimeout(timer));
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
+  const viewerNavigation = request.mode === 'navigate' && url.origin === self.location.origin && url.pathname === '/offline.html';
+  if (viewerNavigation) {
+    event.respondWith(navigationFetch(request).catch(async () => (await (await caches.open(CACHE_NAME)).match('/offline.html')) || Response.error()));
+    return;
+  }
   const allowed = !request.headers.has('authorization') && !request.headers.has('range') && publicAsset(url);
   if (allowed) {
     // Fetch only public assets without cookies; never persist the caller's headers.
@@ -68,10 +83,11 @@ self.addEventListener('fetch', event => {
     return;
   }
   // APIs, Supabase, signed media, RSC and account pages never read or write caches.
-  event.respondWith(fetch(request, {cache: 'no-store'}).catch(async () => {
+  const response = request.mode === 'navigate' ? navigationFetch(request) : fetch(request, {cache: 'no-store'});
+  event.respondWith(response.catch(async () => {
     if (request.mode === 'navigate' && url.origin === self.location.origin && url.pathname === '/' && !url.search && !request.headers.has('authorization')) {
       const cache = await caches.open(CACHE_NAME);
-      return (await cache.match('/')) || Response.error();
+      return (await cache.match('/offline.html')) || Response.error();
     }
     return Response.error();
   }));

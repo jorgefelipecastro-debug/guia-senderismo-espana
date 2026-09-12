@@ -32,6 +32,7 @@ export default function RoutePreparation({ route, download, readSaved }) {
       <p role="status">{saved ? 'Trazado guardado para consultar sin conexión.' : 'Todavía no has guardado este trazado.'}</p>
       <button type="button" onClick={saveTrack} disabled={busy}>{busy ? 'Guardando trazado…' : saved ? 'Actualizar trazado' : 'Guardar trazado para la salida'}</button>
       {error && <p role="alert">{error}</p>}
+      {saved && <p><a href={`/offline.html?route=${encodeURIComponent(route.id)}`} target="_blank" rel="noopener">Descargar y comprobar el mapa sin conexión ↗</a></p>}
       <small>Guardar el trazado no inicia el registro GPS ni descarga el mapa de fondo completo.</small>
     </div>
     <p>Revisa el acceso y los avisos de la ruta. Cuando estés listo, utiliza el botón habitual de iniciar ruta.</p>

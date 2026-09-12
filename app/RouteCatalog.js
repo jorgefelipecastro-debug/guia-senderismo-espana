@@ -1668,6 +1668,7 @@ function GpsRecorder({ route, previous, onSaved }) {
           <div className="offlineReady">
             <b>✓ TRAZADO DISPONIBLE OFFLINE</b>
             <span>{offline.points.length} puntos de referencia guardados</span>
+            <a href={`/offline.html?route=${encodeURIComponent(route.id)}`} target="_blank" rel="noopener">Preparar y abrir el mapa sin conexión ↗</a>
           </div>
         )}
         {recoverable && !recording && (

@@ -22,7 +22,7 @@ function harness() {
     },
   };
   const h = {caches, stores, calls, offline: false, response: () => new Response('public', {headers: {'cache-control':'public, max-age=60'}})};
-  vm.runInNewContext(source, {URL, Request, Response, caches,
+  vm.runInNewContext(source, {URL, Request, Response, caches, AbortController, setTimeout, clearTimeout,
     self: {location:{origin}, addEventListener:(n,f)=>listeners[n]=f, skipWaiting:async()=>{}, clients:{claim:async()=>{h.claimed = true;}}},
     fetch: async (r, options) => {calls.push({r,options}); if(h.offline) throw Error('offline'); return h.response(r);},
   });
@@ -38,9 +38,9 @@ function harness() {
 const req = (path, headers={}) => new Request(new URL(path,origin), {headers});
 test('upgrade purges owned legacy caches and preserves other apps', async()=>{
   const h=harness();
-  for(const name of ['encumbrate-v13','encumbrate-v12','cumbre-v1','allzone-v1','encumbrate-public-v14']) await h.caches.open(name);
+  for(const name of ['encumbrate-v13','encumbrate-v12','cumbre-v1','allzone-v1','encumbrate-public-v15']) await h.caches.open(name);
   await h.dispatch('activate');
-  assert.deepEqual(await h.caches.keys(), ['allzone-v1','encumbrate-public-v14']); assert.equal(h.claimed,true);
+  assert.deepEqual(await h.caches.keys(), ['allzone-v1','encumbrate-public-v15']); assert.equal(h.claimed,true);
 });
 test('shell is anonymous, public and never copied from user navigation', async()=>{
   const h=harness(); await h.dispatch('install');
@@ -53,7 +53,7 @@ test('shell is anonymous, public and never copied from user navigation', async()
 });
 test('private shell does not block activation and is never cached',async()=>{
   const h=harness();h.response=()=>new Response('secret',{headers:{'cache-control':'private, no-store'}});
-  await h.dispatch('install');assert.equal(h.stores.get('encumbrate-public-v14').size,0);
+  await assert.rejects(h.dispatch('install'));assert.equal(h.stores.get('encumbrate-public-v15').size,0);
 });
 test('APIs, cross-origin media, tokens and RSC never use cached responses even across account changes',async()=>{
   const h=harness(), cache=await h.caches.open('encumbrate-v13');
@@ -83,5 +83,14 @@ test('cache quota failure does not turn a successful request into failure',async
 test('asset limit preserves the anonymous shell',async()=>{
   const h=harness();await h.dispatch('install');
   for(let i=0;i<165;i++) await h.dispatch('fetch',req(`/_next/static/${i}.js`));
-  const c=await h.caches.open('encumbrate-public-v14');assert.equal((await c.keys()).length,165);assert.ok(await c.match('/'));
+  const c=await h.caches.open('encumbrate-public-v15');assert.equal((await c.keys()).length,168);assert.ok(await c.match('/'));
+});
+
+test('cold offline navigation opens a self-contained viewer with all its modules cached',async()=>{
+ const h=harness();h.response=r=>new Response(String(r.url || r),{headers:{'cache-control':'public'}});await h.dispatch('install');h.offline=true;
+ const response=await h.dispatch('fetch',{url:origin+'/',method:'GET',mode:'navigate',headers:new Headers()});
+ assert.equal(await response.text(),origin+'/offline.html');
+ for(const path of ['/offline/viewer.mjs','/offline/maps.mjs']) assert.equal((await h.dispatch('fetch',req(path))).status,200);
+ const direct=await h.dispatch('fetch',{url:origin+'/offline.html?route=test',method:'GET',mode:'navigate',headers:new Headers()});
+ assert.equal(await direct.text(),origin+'/offline.html');
 });
