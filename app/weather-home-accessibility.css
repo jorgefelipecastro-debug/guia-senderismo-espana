@@ -1,0 +1,28 @@
+/* Accessibility refinements for the compact home weather widget.
+   Keep the card visually compact while preserving readable text and touch targets. */
+.weatherHomeSmall .weatherHomeTop{min-height:44px;padding:0 8px}
+.weatherHomeSmall .weatherLocation{min-height:44px;font-size:13px!important;padding:5px 4px;line-height:1.2}
+.weatherHomeSmall .weatherLocation svg{width:17px;height:17px}
+.weatherHomeSmall .weatherRefresh{width:44px;height:44px;margin:-6px 0;border-radius:50%!important}
+.weatherHomeSmall .weatherRefresh svg{width:18px;height:18px}
+
+.weatherHomeSmall .weatherHomeMain{min-height:58px;height:58px;padding:0 12px!important}
+.weatherHomeSmall .weatherClock{left:13px;top:5px}
+.weatherHomeSmall .weatherClock small{font-size:10px;line-height:1.15;letter-spacing:.55px;color:#f4f7f8;text-shadow:0 1px 2px #102d3d80}
+.weatherHomeSmall .weatherClock>strong{font-size:27px;line-height:1.05}
+.weatherHomeSmall .weatherHomeReading{left:43%;right:62px;top:5px}
+.weatherHomeSmall .weatherHomeReading strong{font-size:25px;line-height:1}
+.weatherHomeSmall .weatherHomeReading strong>span{font-size:11px;opacity:.9}
+.weatherHomeSmall .weatherHomeReading p{font-size:11px;line-height:1.2;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px #102d3d80}
+.weatherHomeSmall .weatherSky{top:1px;right:0;transform:scale(.34)}
+
+.weatherHomeSmall .weatherHomeBottom{min-height:44px;padding:0 8px 0 10px;gap:6px}
+.weatherHomeSmall .weatherHomeBottom small{font-size:10px;line-height:1.25;max-width:64%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
+.weatherHomeSmall .weatherHomeBottom button{min-height:44px;padding:0 6px;font-size:11px;line-height:1.1}
+
+@media(max-width:360px){
+  .weatherHomeSmall .weatherHomeReading{left:45%;right:54px}
+  .weatherHomeSmall .weatherClock small{font-size:9px}
+  .weatherHomeSmall .weatherHomeReading p{font-size:10px}
+  .weatherHomeSmall .weatherHomeBottom small{font-size:9px;max-width:58%}
+}
