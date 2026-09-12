@@ -79,16 +79,16 @@ export function smoothHeading(current,target,{factor=.18,maxStep=3,deadband=.6}=
 export function adaptiveHeading(current,target){
  if(current===null||!Number.isFinite(current))return normalizeHeading(target);
  const distance=Math.abs(angleDifference(target,current));
- if(distance>=45)return smoothHeading(current,target,{factor:.92,maxStep:110,deadband:0});
- if(distance>=18)return smoothHeading(current,target,{factor:.8,maxStep:36,deadband:.2});
- if(distance>=8)return smoothHeading(current,target,{factor:.42,maxStep:7,deadband:.8});
- return smoothHeading(current,target,{factor:.16,maxStep:1.1,deadband:COMPASS_TUNING.deadbandDegrees});
+ if(distance>=45)return smoothHeading(current,target,{factor:.9,maxStep:90,deadband:0});
+ if(distance>=18)return smoothHeading(current,target,{factor:.75,maxStep:28,deadband:.3});
+ if(distance>=8)return smoothHeading(current,target,{factor:.32,maxStep:5,deadband:1});
+ return smoothHeading(current,target,{factor:.14,maxStep:.8,deadband:COMPASS_TUNING.deadbandDegrees});
 }
 
 export function nextCalibrationState(current,spread,accurate=true){
  if(!accurate)return 'calibrating';
- if(current==='stable')return spread<=20?'stable':'calibrating';
- return spread<=12?'stable':'calibrating';
+ if(current==='stable')return spread<=18?'stable':'calibrating';
+ return spread<=10?'stable':'calibrating';
 }
 
 export function shouldUseHeadingSource(currentSource,nextSource){
@@ -100,7 +100,7 @@ export function shouldUseHeadingSource(currentSource,nextSource){
 export function calibrationWarning(dismissed,{ios=false,accuracy=NaN,spread=0}={}){
  if(dismissed)return '';
  if(ios&&Number.isFinite(accuracy)&&accuracy>35)return 'La precisión magnética es baja. Aleja el móvil de fundas magnéticas, llaves, altavoces y objetos metálicos. Después muévelo lentamente dibujando un 8 en el aire.';
- if(spread>22)return 'Señal magnética inestable. Aleja el móvil de objetos metálicos y calibra el sensor moviendo el teléfono lentamente en forma de 8.';
+ if(spread>18)return 'Señal magnética inestable. Aleja el móvil de objetos metálicos y calibra el sensor moviendo el teléfono lentamente en forma de 8.';
  return '';
 }
 
