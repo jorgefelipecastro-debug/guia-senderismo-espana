@@ -11,7 +11,6 @@ export const metadata = {
   description: 'Descubre, prepara, vive y disfruta rutas de senderismo por España.',
   manifest: '/manifest.webmanifest',
   applicationName: 'Encúmbrate',
-  themeColor: '#0b4a38',
   appleWebApp: {
     capable: true,
     title: 'Encúmbrate',
