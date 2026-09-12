@@ -4,9 +4,35 @@ Tarjeta de Inicio y bloque de Información práctica en cada ruta; mismo diálog
 
 ## Configuración
 
-AEMET_API_KEY debe estar en Production como secreto, nunca NEXT_PUBLIC ni en el repositorio. El usuario confirma haberla guardado. No hay nuevas suscripciones, migraciones ni dependencias. Documentación: https://opendata.aemet.es/ y https://www.aemet.es/es/datos_abiertos .
+`AEMET_API_KEY` debe estar en Production como secreto, nunca `NEXT_PUBLIC` ni en el repositorio. No se muestra en la consola administrativa ni se devuelve en ninguna API.
 
-Las nuevas claves caducan; renovar antes de la fecha indicada por AEMET, cambiar el secreto y desplegar. No se crea una clave permanente ni una renovación automática.
+Para que Encúmbrate pueda avisar antes de la renovación se admite una de estas variables privadas adicionales:
+
+- `AEMET_API_KEY_EXPIRES_AT=YYYY-MM-DD` — opción preferida si se conoce la fecha exacta de caducidad.
+- `AEMET_API_KEY_CREATED_AT=YYYY-MM-DD` — alternativa; Encúmbrate calcula tres meses naturales desde la fecha de creación.
+
+Si ninguna de esas fechas está configurada, la consola no inventa una caducidad: muestra el estado `unknown-expiry` y recuerda el corte de las claves antiguas sin expiración el 2026-10-15.
+
+### Mantenimiento y renovación
+
+La consola `/admin` comprueba la credencial contra AEMET sin descargar el catálogo completo y muestra un bloque **AEMET · SALUD DE CREDENCIAL**:
+
+- verde cuando la credencial está operativa y faltan más de 30 días;
+- amarillo cuando quedan 30 días o menos;
+- crítico cuando quedan 7 días o menos, la fecha ya venció, falta la clave o AEMET la rechaza;
+- el botón **Comprobar ahora** fuerza una comprobación sin caché.
+
+Un HTTP `401` de AEMET, tanto en la comprobación administrativa como durante una previsión normal, se clasifica como `AEMET_AUTH` y genera una incidencia crítica en la monitorización administrativa. La clave nunca se incluye en el error registrado.
+
+Procedimiento de renovación:
+
+1. Obtener una nueva API Key en AEMET OpenData.
+2. Sustituir únicamente el secreto `AEMET_API_KEY` en el entorno de producción.
+3. Actualizar `AEMET_API_KEY_EXPIRES_AT` o `AEMET_API_KEY_CREATED_AT` con la fecha de la nueva credencial.
+4. Desplegar la nueva configuración.
+5. Abrir `/admin` y pulsar **Comprobar ahora** hasta obtener estado operativo.
+
+No se crea una clave permanente ni una renovación automática; el sistema detecta y avisa para que la rotación se haga antes de la interrupción del servicio.
 
 ## Datos
 
@@ -16,8 +42,8 @@ Si falla la previsión horaria, se conserva la diaria. Cada día muestra únicam
 
 Hasta 12 previsiones se guardan en el navegador; fecha visible, aviso de antigüedad y aviso de fallo de actualización. No se garantiza arranque completo offline. Las recomendaciones son heurísticas, no acreditan seguridad de una ruta.
 
-Avisos oficiales y predicción de montaña: enlaces AEMET. La ingestión automática de avisos por zona sigue pendiente.
+Los avisos meteorológicos oficiales se integran por ruta mediante CAP/RSS de AEMET y conservan nivel, validez y zona. La predicción de montaña continúa enlazando con la fuente oficial cuando corresponde.
 
 ## Verificación
 
-Pruebas unitarias de coordenadas, cache corrupta, condiciones, respuesta diaria sin horaria, valores vacíos, búsqueda, municipios y zona horaria Canarias. Compilación con variables Supabase ficticias solo para validar código. Las peticiones locales a AEMET devolvieron 502; la comprobación real se realiza después del despliegue en Vercel. El navegador local está bloqueado con ERR_BLOCKED_BY_CLIENT.
+Las pruebas automáticas cubren coordenadas, caché corrupta, condiciones, respuesta diaria sin horaria, valores vacíos, búsqueda, municipios, zona horaria Canarias, ciclo de vida de la API Key, umbrales 30/7 días, corte de claves antiguas, detección HTTP/envelope 401 y protección del endpoint administrativo. La CI ejecuta `npm test` y un build completo de Next.js en cada PR y en `main`.
