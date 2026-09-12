@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {weatherCoordinates,weatherLabel,weatherAdvice,validWeatherCache,daylightHours} from '../lib/weather';
+import {WEATHER_AUTO_REFRESH_MS,weatherCoordinates,weatherRefreshDue,weatherLabel,weatherAdvice,validWeatherCache,daylightHours} from '../lib/weather';
 import './weather.css';
 import WeatherHomeCard from './WeatherHomeCard';
 
@@ -12,6 +12,7 @@ function saveCache(key,data) {try {const cache=JSON.parse(localStorage.getItem(C
 
 export default function Weather({route}) {
   const [place,setPlace]=useState(null),[open,setOpen]=useState(false),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[refresh,setRefresh]=useState(0),[locationError,setLocationError]=useState(''),[locationMode,setLocationMode]=useState('gps');
+  const autoRefreshAt=useRef(0);
   const coordinates=route ? weatherCoordinates(route.lat,route.lon) : weatherCoordinates(place?.lat,place?.lon);
   const key=coordinates ? `${coordinates.lat},${coordinates.lon}` : '';
   useEffect(()=>{
@@ -37,6 +38,24 @@ export default function Weather({route}) {
     document.addEventListener('visibilitychange',locate);
     return()=>{active=false;clearInterval(timer);document.removeEventListener('visibilitychange',locate);};
   },[route,locationMode]);
+  useEffect(()=>{
+    if(!key)return;
+    autoRefreshAt.current=0;
+    const requestRefresh=()=>{
+      if(document.visibilityState==='hidden'||navigator.onLine===false)return;
+      const now=Date.now();
+      if(now-autoRefreshAt.current<60000)return;
+      const cached=readCache(key);
+      if(!weatherRefreshDue(cached?.fetchedAt,now))return;
+      autoRefreshAt.current=now;
+      setRefresh(n=>n+1);
+    };
+    const onVisibility=()=>{if(document.visibilityState==='visible')requestRefresh();};
+    const timer=setInterval(requestRefresh,WEATHER_AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange',onVisibility);
+    window.addEventListener('online',requestRefresh);
+    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',onVisibility);window.removeEventListener('online',requestRefresh);};
+  },[key]);
   useEffect(()=>{
     if(!key){setData(null);return;}
     const controller=new AbortController();let active=true;

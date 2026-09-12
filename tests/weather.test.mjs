@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {weatherCoordinates,normalizeWeather,weatherAdvice,weatherLabel,validWeatherCache,daylightHours} from '../lib/weather.js';
+import {WEATHER_AUTO_REFRESH_MS,weatherCoordinates,weatherRefreshDue,normalizeWeather,weatherAdvice,weatherLabel,validWeatherCache,daylightHours} from '../lib/weather.js';
 import {rateLimitPolicy} from '../lib/api-rate-limit.js';
 test('weather rejects empty or impossible coordinates and rounds to a shared forecast cell',()=>{
  for(const [a,b] of [[null,0],['',0],[91,0],[0,181],['bad',0]])assert.equal(weatherCoordinates(a,b),null);
  assert.deepEqual(weatherCoordinates(38.34567,-.48321),{lat:38.35,lon:-.48});
  assert.deepEqual(weatherCoordinates(0,0),{lat:0,lon:0});
+});
+test('weather refresh becomes due after thirty minutes even when the coordinates do not change',()=>{
+ const fetched='2026-09-12T10:00:00.000Z';
+ assert.equal(WEATHER_AUTO_REFRESH_MS,30*60*1000);
+ assert.equal(weatherRefreshDue(fetched,Date.parse('2026-09-12T10:29:59.999Z')),false);
+ assert.equal(weatherRefreshDue(fetched,Date.parse('2026-09-12T10:30:00.000Z')),true);
+ assert.equal(weatherRefreshDue(fetched,new Date('2026-09-12T10:45:00.000Z')),true);
+ assert.equal(weatherRefreshDue('',Date.parse('2026-09-12T10:00:00.000Z')),true);
 });
 test('weather preserves missing measurements instead of inventing zeroes',()=>{
  const result=normalizeWeather({hourly:{time:['2026-09-09T08:00'],temperature_2m:[null]},daily:{time:['2026-09-09']}},'2026-09-09T06:00:00Z');
