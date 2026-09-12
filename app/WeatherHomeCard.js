@@ -2,6 +2,7 @@
 import {useEffect,useState} from 'react';
 import {weatherLabel} from '../lib/weather';
 import './weather-home.css';
+import './weather-home-accessibility.css';
 
 const value=(n,unit='')=>Number.isFinite(n)?`${Math.round(n)}${unit}`:'—';
 function localParts(date,timezone){
