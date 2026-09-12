@@ -5,8 +5,8 @@ export const COMPASS_TUNING=Object.freeze({
  spreadWindow:12,
  outlierLimitDegrees:22,
  deadbandDegrees:2,
- maxAngularRate:320,
- spikeConfirmationDegrees:12
+ maxAngularRate:720,
+ spikeConfirmationDegrees:16
 });
 
 export function normalizeHeading(value){
@@ -50,7 +50,7 @@ export function robustCircularMean(values,limit=COMPASS_TUNING.outlierLimitDegre
 
 export function headingSampleDecision(previous,candidate,elapsedMs,pending=null){
  if(!Number.isFinite(previous))return {accept:true,pending:null};
- const elapsed=Math.max(0,Number(elapsedMs)||0),distance=Math.abs(angleDifference(candidate,previous)),allowed=8+COMPASS_TUNING.maxAngularRate*elapsed/1000;
+ const elapsed=Math.max(0,Number(elapsedMs)||0),distance=Math.abs(angleDifference(candidate,previous)),allowed=10+COMPASS_TUNING.maxAngularRate*elapsed/1000;
  if(distance<=allowed)return {accept:true,pending:null};
  if(pending&&Math.abs(angleDifference(candidate,pending.value))<=COMPASS_TUNING.spikeConfirmationDegrees)return {accept:true,pending:null};
  return {accept:false,pending:{value:normalizeHeading(candidate)}};
@@ -111,7 +111,7 @@ export function headingFromQuaternion(quaternion){
  // Proyecta el eje +Y del dispositivo (parte superior del móvil) sobre
  // los ejes terrestres X=este e Y=norte.
  const east=2*(x*y-z*w),north=1-2*(x*x+z*z);
- if(Math.hypot(east,north)<.25)return null;
+ if(Math.hypot(east,north)<.18)return null;
  return normalizeHeading(Math.atan2(east,north)*180/Math.PI);
 }
 
