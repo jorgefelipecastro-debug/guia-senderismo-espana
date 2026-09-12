@@ -46,9 +46,10 @@ test('promedia correctamente al cruzar de 359 a 0 grados',()=>{
 test('el promedio robusto descarta una lectura magnética aislada',()=>{
  const mean=robustCircularMean([358,359,0,1,2,180]);
  assert.ok(mean<2||mean>358);
- assert.equal(COMPASS_TUNING.sensorFrequencyHz,20);
- assert.equal(COMPASS_TUNING.visualFrequencyHz,10);
- assert.equal(COMPASS_TUNING.deadbandDegrees,2);
+ assert.equal(COMPASS_TUNING.sensorFrequencyHz,30);
+ assert.equal(COMPASS_TUNING.visualFrequencyHz,15);
+ assert.equal(COMPASS_TUNING.displayWindow,7);
+ assert.equal(COMPASS_TUNING.deadbandDegrees,1.5);
 });
 
 test('el guardia magnético rechaza picos y confirma giros reales',()=>{
@@ -76,15 +77,16 @@ test('suaviza por el camino corto y limita los saltos visuales',()=>{
 });
 
 test('responde deprisa a un giro real sin temblar cuando está quieta',()=>{
- assert.equal(adaptiveHeading(0,120),90);
+ assert.ok(adaptiveHeading(0,120)>=95);
  assert.equal(adaptiveHeading(359,359.5),359);
  assert.equal(adaptiveHeading(100,101.4),100);
- assert.equal(adaptiveHeading(100,101.9),100);
- assert.ok(adaptiveHeading(100,108)>102&&adaptiveHeading(100,108)<103);
- assert.ok(adaptiveHeading(100,112)>103&&adaptiveHeading(100,112)<105);
+ assert.ok(adaptiveHeading(100,101.6)>100&&adaptiveHeading(100,101.6)<100.3);
+ assert.ok(adaptiveHeading(100,104)>100.8&&adaptiveHeading(100,104)<101.2);
+ assert.ok(adaptiveHeading(100,108)>102.5&&adaptiveHeading(100,108)<104);
+ assert.ok(adaptiveHeading(100,112)>104&&adaptiveHeading(100,112)<106);
  const corrected=adaptiveHeading(350,20);
  assert.ok(corrected>350||corrected<20);
- assert.ok(Math.abs(angleDifference(20,corrected))<8);
+ assert.ok(Math.abs(angleDifference(20,corrected))<6);
 });
 
 test('mantiene estable el estado ante ruido intermedio y recalibra solo si es alto',()=>{
@@ -100,7 +102,6 @@ test('convierte el cuaternión Android con el mismo sentido cardinal que DeviceO
  assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-90)<.0001);
  assert.ok(Math.abs(headingFromQuaternion([0,0,-half,half])-270)<.0001);
  assert.equal(headingFromQuaternion(null),null);
- // Ambos sensores deben entender un giro hacia el este como 90°, no como 270°.
  assert.equal(headingFromDeviceOrientation(270,0),90);
  assert.ok(Math.abs(headingFromQuaternion([0,0,half,half])-headingFromDeviceOrientation(270,0))<.0001);
 });
