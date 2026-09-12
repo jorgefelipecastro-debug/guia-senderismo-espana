@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   breadcrumbReturn,
+  gpsFixFresh,
   gpsFixUsable,
   navigationHeading,
   nearestPolylinePoint,
@@ -26,6 +27,14 @@ test("descarta posiciones GPS imposibles o demasiado imprecisas", () => {
   assert.equal(gpsFixUsable({ lat: 38.35, lon: -0.48, accuracy: 120 }), false);
   assert.equal(gpsFixUsable({ lat: 95, lon: -0.48, accuracy: 10 }), false);
   assert.equal(gpsFixUsable({ lat: 38.35, lon: 200, accuracy: 10 }), false);
+});
+
+test("marca como caducada una muestra GPS antigua aunque conserve buena precisión", () => {
+  const now = 1_000_000;
+  assert.equal(gpsFixFresh({ at: now - 3000 }, now), true);
+  assert.equal(gpsFixFresh({ at: now - 9000 }, now), false);
+  assert.equal(gpsFixFresh({ at: now + 3000 }, now), true);
+  assert.equal(gpsFixFresh({ at: now + 6000 }, now), false);
 });
 
 test("rechaza saltos GPS físicamente inverosímiles sin bloquear una caminata normal", () => {
@@ -97,9 +106,11 @@ test("la guía web usa segmentos reales, conserva el watch y muestra fallos GPS"
   assert.match(source, /nearestPolylinePoint/);
   assert.match(source, /plausibleGpsTransition/);
   assert.match(source, /navigationHeading/);
+  assert.match(source, /gpsFixFresh/);
   assert.match(source, /\},\[track\.id\]\);/);
   assert.match(source, /Permiso de ubicación bloqueado/);
   assert.match(source, /Señal GPS interrumpida/);
+  assert.match(source, /Última precisión válida/);
 });
 
 test("la simplificación conserva una curva pronunciada", () => {
