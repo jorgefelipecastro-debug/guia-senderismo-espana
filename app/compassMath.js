@@ -108,9 +108,11 @@ export function headingFromQuaternion(quaternion){
  if(!quaternion||quaternion.length<4)return null;
  const[x,y,z,w]=quaternion.map(Number);
  if(![x,y,z,w].every(Number.isFinite))return null;
- // Proyecta el eje +Y del dispositivo (parte superior del móvil) sobre
- // los ejes terrestres X=este e Y=norte.
- const east=2*(x*y-z*w),north=1-2*(x*x+z*z);
+ // AbsoluteOrientationSensor entrega la rotación referencia->dispositivo.
+ // Para obtener el rumbo de la parte superior del móvil en coordenadas terrestres
+ // usamos la rotación inversa. Esto evita que la rosa gire en el mismo sentido
+ // que el usuario: al girar hacia el este, el rumbo debe aumentar hasta 90°.
+ const east=2*(x*y+z*w),north=1-2*(x*x+z*z);
  if(Math.hypot(east,north)<.18)return null;
  return normalizeHeading(Math.atan2(east,north)*180/Math.PI);
 }
