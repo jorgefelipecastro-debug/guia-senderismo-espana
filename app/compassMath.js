@@ -1,10 +1,10 @@
 export const COMPASS_TUNING=Object.freeze({
- sensorFrequencyHz:20,
- visualFrequencyHz:10,
- displayWindow:9,
+ sensorFrequencyHz:30,
+ visualFrequencyHz:15,
+ displayWindow:7,
  spreadWindow:12,
  outlierLimitDegrees:22,
- deadbandDegrees:2,
+ deadbandDegrees:1.5,
  maxAngularRate:720,
  spikeConfirmationDegrees:16
 });
@@ -79,10 +79,12 @@ export function smoothHeading(current,target,{factor=.18,maxStep=3,deadband=.6}=
 export function adaptiveHeading(current,target){
  if(current===null||!Number.isFinite(current))return normalizeHeading(target);
  const distance=Math.abs(angleDifference(target,current));
- if(distance>=45)return smoothHeading(current,target,{factor:.9,maxStep:90,deadband:0});
- if(distance>=18)return smoothHeading(current,target,{factor:.75,maxStep:28,deadband:.3});
- if(distance>=8)return smoothHeading(current,target,{factor:.32,maxStep:5,deadband:1});
- return smoothHeading(current,target,{factor:.14,maxStep:.8,deadband:COMPASS_TUNING.deadbandDegrees});
+ // Mucha respuesta durante giros reales; amortiguación fuerte al quedarse quieto.
+ if(distance>=45)return smoothHeading(current,target,{factor:.94,maxStep:100,deadband:0});
+ if(distance>=18)return smoothHeading(current,target,{factor:.82,maxStep:32,deadband:.2});
+ if(distance>=8)return smoothHeading(current,target,{factor:.42,maxStep:7,deadband:.7});
+ if(distance>=3)return smoothHeading(current,target,{factor:.26,maxStep:2,deadband:.8});
+ return smoothHeading(current,target,{factor:.12,maxStep:.5,deadband:COMPASS_TUNING.deadbandDegrees});
 }
 
 export function nextCalibrationState(current,spread,accurate=true){
