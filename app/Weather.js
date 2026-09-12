@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {WEATHER_AUTO_REFRESH_MS,weatherCoordinates,weatherRefreshDue,weatherLabel,weatherAdvice,validWeatherCache,daylightHours} from '../lib/weather';
 import './weather.css';
 import WeatherHomeCard from './WeatherHomeCard';
+import WeatherAlerts from './WeatherAlerts';
 
 const format = (value,unit='') => Number.isFinite(value) ? `${Math.round(value*10)/10}${unit}` : '—';
 const clock = value => value?.slice(11,16) || '—';
@@ -66,6 +67,7 @@ export default function Weather({route}) {
   },[key,refresh]);
   function choosePlace(value){setLocationError('');setLocationMode(value.name==='Mi ubicación aproximada'?'gps':'manual');setPlace(value);}
   return <><WeatherHomeCard route={route} data={data} place={place} loading={loading} error={error||locationError} onOpen={()=>setOpen(true)} onRefresh={()=>setRefresh(n=>n+1)}/>
+    {route&&<WeatherAlerts route={route}/>} 
     {open&&<WeatherDetail close={()=>setOpen(false)} route={route} place={place} choosePlace={choosePlace} data={data} error={error} loading={loading} retry={()=>setRefresh(n=>n+1)} hasCoordinates={!!key}/>}
   </>;
 }
@@ -98,7 +100,7 @@ function WeatherDetail({close,route,place,choosePlace,data,error,loading,retry,h
         <section className="weatherAdvice"><h3>Qué tener en cuenta para tu salida</h3><div className="weatherSearch"><label>Salida <input type="time" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Regreso el mismo día <input type="time" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>{invalidTime?<p>El regreso debe ser posterior a la salida.</p>:advice.length?<ul>{advice.map(text=><li key={text}>{text}</li>)}</ul>:<p>Revisa la previsión por horas y los avisos oficiales. Este resumen no confirma que la ruta sea segura.</p>}<small>Orientaciones calculadas con el pronóstico disponible, no avisos oficiales. Si faltan horas, el resumen no cubre toda tu salida.</small></section>
         <h3>Previsión por horas</h3><p>Las probabilidades de lluvia corresponden al intervalo indicado por AEMET. Los campos sin datos se muestran con —.</p>{!hours.length&&<p>AEMET no ofrece detalle horario para este día. Consulta la previsión diaria.</p>}<div className="weatherTable" tabIndex={0} role="region" aria-label="Previsión horaria, desplaza horizontalmente para ver todos los datos"><table><thead><tr>{['Hora','Cielo','Temperatura','Sensación','Lluvia % por intervalo','Intervalo lluvia','Agua mm','Nieve cm','Viento km/h','Rachas km/h','Dirección °','Visibilidad km','Nubes %','UV'].map(t=><th key={t} scope="col">{t}</th>)}</tr></thead><tbody>{hours.map(h=><tr key={h.time}><th scope="row">{clock(h.time)}</th><td>{weatherLabel(h.code)}</td>{[h.temperature,h.feels,h.rainProbability,h.rainPeriod,h.rain,h.snow,h.wind,h.gust,h.windDirection,h.visibility===null?null:h.visibility/1000,h.cloud,h.uv].map((v,i)=><td key={i}>{i===3?(v?`${v.slice(0,2)}–${v.slice(2)} h`:"—"):format(v)}</td>)}</tr>)}</tbody></table></div>
       </>}
-      <section><h3>Avisos oficiales</h3><p>Consulta los avisos vigentes para la zona y la predicción de montaña. Los avisos oficiales no se descargan en esta pantalla.</p><p><a href="https://www.aemet.es/es/eltiempo/prediccion/avisos" target="_blank" rel="noopener noreferrer">Avisos de AEMET ↗</a></p><a href="https://www.aemet.es/es/eltiempo/prediccion/montana" target="_blank" rel="noopener noreferrer">Predicción de montaña de AEMET ↗</a></section>
+      <section><h3>Avisos oficiales</h3><p>Los avisos que afectan al trazado se muestran directamente en la ficha de la ruta. Consulta también el mapa oficial si vas a salir.</p><p><a href="https://www.aemet.es/es/eltiempo/prediccion/avisos" target="_blank" rel="noopener noreferrer">Mapa oficial de avisos AEMET ↗</a></p><a href="https://www.aemet.es/es/eltiempo/prediccion/montana" target="_blank" rel="noopener noreferrer">Predicción de montaña de AEMET ↗</a></section>
       <footer>Datos meteorológicos: <a href="https://www.aemet.es/" target="_blank" rel="noopener noreferrer">AEMET</a> · <a href="https://www.aemet.es/es/nota_legal" target="_blank" rel="noopener noreferrer">Condiciones de reutilización</a>. Se conservan hasta 12 previsiones consultadas en este navegador para su lectura sin conexión. Esto no garantiza el arranque de toda la aplicación offline.</footer>
     </main>
   </dialog>;
