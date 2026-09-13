@@ -98,7 +98,7 @@ test("adapta el aviso de salida del sendero a la precisión real del GPS", () =>
   assert.equal(routeProximity(100, 70).status, "uncertain");
 });
 
-test("la guía web usa segmentos reales, conserva el watch y muestra fallos GPS", async () => {
+test("la guía web usa segmentos reales, conserva el watch y muestra fallos de ubicación", async () => {
   const source = await readFile(
     new URL("../app/LiveRouteGuide.js", import.meta.url),
     "utf8",
@@ -109,7 +109,7 @@ test("la guía web usa segmentos reales, conserva el watch y muestra fallos GPS"
   assert.match(source, /gpsFixFresh/);
   assert.match(source, /\},\[track\.id\]\);/);
   assert.match(source, /Permiso de ubicación bloqueado/);
-  assert.match(source, /Señal GPS interrumpida/);
+  assert.match(source, /Señal de ubicación interrumpida/);
   assert.match(source, /Última precisión válida/);
 });
 
