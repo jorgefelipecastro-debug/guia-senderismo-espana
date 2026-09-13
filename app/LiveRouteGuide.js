@@ -2,39 +2,67 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {gpsFixFresh,gpsFixUsable,navigationHeading,nearestPolylinePoint,plausibleGpsTransition,routeProximity} from '../lib/navigation-geometry';
-import {downloadLiveOfflineMap,leafletBoundsFromMercator,readLiveOfflineMap} from '../lib/live-offline-map';
+import {downloadLiveOfflineMap,leafletBoundsFromMercator,liveMapRecordCovers,readLiveOfflineMap} from '../lib/live-offline-map';
 
 export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
-  const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),offlineUrlRef=useRef(null),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[offlineMapState,setOfflineMapState]=useState('checking'),[following,setFollowing]=useState(true);
+  const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),offlineUrlRef=useRef(null),offlineRecordRef=useRef(null),ensureOfflineCoverageRef=useRef(null),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[offlineMapState,setOfflineMapState]=useState('checking'),[following,setFollowing]=useState(true);
   useEffect(()=>{followingRef.current=following},[following]);
   useEffect(()=>{
-    let active=true,offlineLayer=null,preparing=false;
+    let active=true,offlineLayer=null,preparing=false,tiles=null;
     const abort=new AbortController();
     async function mount(){
       const L=(await import('leaflet')).default;if(!active||!nodeRef.current)return;
       const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;
-      if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='180';pane.style.pointerEvents='none'}
-      const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).on('tileerror',()=>setTileError(true)).on('load',()=>{if(navigator.onLine)setTileError(false)}).addTo(map);
+      if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='250';pane.style.pointerEvents='none'}
+      tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).on('tileerror',()=>setTileError(true)).on('load',()=>{if(navigator.onLine)setTileError(false)}).addTo(map);
       L.polyline(points,{color:'#063d2c',weight:10,opacity:.72}).addTo(map);L.polyline(points,{color:'#78d443',weight:6,opacity:1}).addTo(map);map.fitBounds(L.latLngBounds(points),{padding:[30,30]});L.control.zoom({position:'bottomright'}).addTo(map);map.on('dragstart',()=>setFollowing(false));
-      async function prepareOffline(){
-        if(!active||preparing||offlineLayer)return;preparing=true;setOfflineMapState('checking');
+
+      const applyNetworkLayerState=()=>{
+        const offline=!navigator.onLine;
+        tiles?.setOpacity(offline?0:1);
+        offlineLayer?.setOpacity(offline?1:0);
+      };
+
+      const installRecord=record=>{
+        if(offlineLayer){map.removeLayer(offlineLayer);offlineLayer=null}
+        if(offlineUrlRef.current){URL.revokeObjectURL(offlineUrlRef.current);offlineUrlRef.current=null}
+        const url=URL.createObjectURL(record.blob);offlineUrlRef.current=url;offlineRecordRef.current=record;
+        offlineLayer=L.imageOverlay(url,leafletBoundsFromMercator(record.bounds),{pane:'offlineBasemap',opacity:navigator.onLine?0:1,interactive:false,attribution:'© Instituto Geográfico Nacional'}).addTo(map);
+        applyNetworkLayerState();
+      };
+
+      async function prepareOffline(extraPoint=null,force=false){
+        if(!active||preparing)return;preparing=true;setOfflineMapState('checking');
         try{
           let record=await readLiveOfflineMap(track);
-          if(!record&&navigator.onLine){setOfflineMapState('preparing');record=await downloadLiveOfflineMap(track,{signal:abort.signal})}
-          if(!active||!record)return setOfflineMapState('missing');
-          const url=URL.createObjectURL(record.blob);offlineUrlRef.current=url;
-          offlineLayer=L.imageOverlay(url,leafletBoundsFromMercator(record.bounds),{pane:'offlineBasemap',opacity:1,interactive:false,attribution:'© Instituto Geográfico Nacional'}).addTo(map);
-          setOfflineMapState('ready');
+          const needsCoverage=extraPoint && (!record || !liveMapRecordCovers(record,extraPoint));
+          if((!record||needsCoverage||force)&&navigator.onLine){
+            setOfflineMapState('preparing');
+            record=await downloadLiveOfflineMap(track,{signal:abort.signal,extraPoints:extraPoint?[extraPoint]:[]});
+          }
+          if(!active||!record){setOfflineMapState('missing');return}
+          installRecord(record);
+          setOfflineMapState(extraPoint&&!liveMapRecordCovers(record,extraPoint)?'missing':'ready');
           try{await navigator.storage?.persist?.()}catch{}
         }catch{if(active)setOfflineMapState('missing')}
         finally{preparing=false}
       }
-      const offline=()=>{setTileError(true);prepareOffline()},online=()=>{setTileError(false);prepareOffline()};
-      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);tiles.off()};
-      prepareOffline();
+
+      ensureOfflineCoverageRef.current=async current=>{
+        if(!active||!current)return;
+        const record=offlineRecordRef.current||await readLiveOfflineMap(track);
+        if(record&&liveMapRecordCovers(record,current)){if(!offlineRecordRef.current)installRecord(record);return}
+        if(navigator.onLine)await prepareOffline(current,true);
+      };
+
+      const offline=()=>{setTileError(true);applyNetworkLayerState();prepareOffline(position||null)};
+      const online=()=>{setTileError(false);applyNetworkLayerState();prepareOffline(position||null)};
+      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);tiles?.off();ensureOfflineCoverageRef.current=null};
+      await prepareOffline(position||null);
+      applyNetworkLayerState();
     }
     mount();
-    return()=>{active=false;abort.abort();mapRef.current?._encumbrateCleanup?.();mapRef.current?.remove();mapRef.current=null;if(offlineUrlRef.current){URL.revokeObjectURL(offlineUrlRef.current);offlineUrlRef.current=null}}
+    return()=>{active=false;abort.abort();mapRef.current?._encumbrateCleanup?.();mapRef.current?.remove();mapRef.current=null;offlineRecordRef.current=null;if(offlineUrlRef.current){URL.revokeObjectURL(offlineUrlRef.current);offlineUrlRef.current=null}}
   },[track.id]);
   useEffect(()=>{
     if(!navigator.geolocation){setGpsState('unsupported');return}
@@ -52,6 +80,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       if(!plausibleGpsTransition(previous,candidate)){setGpsState('weak');return}
       const current={...candidate,heading:navigationHeading(previous,candidate)};
       previousFixRef.current=current;lastGoodAtRef.current=Date.now();setPosition(current);
+      ensureOfflineCoverageRef.current?.(current);
       const near=nearestPolylinePoint(current,track.points),proximity=routeProximity(near?.distance??Infinity,current.accuracy);
       setOffRoute(near?.distance??null);setGpsState(proximity.status);
       const map=mapRef.current;if(!map)return;
