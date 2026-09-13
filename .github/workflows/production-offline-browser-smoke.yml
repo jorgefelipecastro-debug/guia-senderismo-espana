@@ -1,0 +1,163 @@
+name: Production Offline Browser Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/production-offline-browser-smoke.yml'
+      - 'app/api/maps/offline/route.js'
+      - 'app/LiveRouteGuide.js'
+      - 'lib/live-offline-map.js'
+      - 'tests/live-offline-map.test.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-offline-browser-smoke
+  cancel-in-progress: true
+
+jobs:
+  browser-offline-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install Chromium smoke-test runtime
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Verify real production offline map in Chromium
+        env:
+          BASE_URL: https://encumbrate-web-production.up.railway.app
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+
+          const base = process.env.BASE_URL;
+          const bbox = '-55546.55048870405,4627584.333912199,-51320.160672838574,4631810.723728064';
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext();
+          const page = await context.newPage();
+          page.setDefaultTimeout(30000);
+
+          try {
+            await page.goto(base + '/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+            const online = await page.evaluate(async (bbox) => {
+              const response = await fetch(`/api/maps/offline?bbox=${encodeURIComponent(bbox)}`, { cache: 'no-store' });
+              if (!response.ok) throw new Error(`offline map HTTP ${response.status}`);
+              const contentType = response.headers.get('content-type') || '';
+              if (!contentType.startsWith('image/')) throw new Error(`unexpected content-type ${contentType}`);
+              const blob = await response.blob();
+              if (!blob.type.startsWith('image/') || blob.size < 1000) throw new Error(`invalid image blob ${blob.type} ${blob.size}`);
+
+              const first = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+              if (!(first[0] === 0xff && first[1] === 0xd8)) throw new Error(`expected JPEG magic, got ${Array.from(first).join(',')}`);
+
+              const bitmap = await createImageBitmap(blob);
+              const width = bitmap.width, height = bitmap.height;
+              bitmap.close();
+              if (width < 256 || height < 256) throw new Error(`unexpected map dimensions ${width}x${height}`);
+
+              const db = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('encumbrate-offline-maps', 1);
+                request.onupgradeneeded = () => {
+                  if (!request.result.objectStoreNames.contains('maps')) request.result.createObjectStore('maps', { keyPath: 'id' });
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+              });
+
+              await new Promise((resolve, reject) => {
+                const tx = db.transaction('maps', 'readwrite');
+                tx.objectStore('maps').put({ id: '__production_smoke__', key: 'smoke', bounds: bbox.split(',').map(Number), blob, savedAt: new Date().toISOString() });
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error);
+                tx.onabort = () => reject(tx.error);
+              });
+              db.close();
+
+              const persisted = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('encumbrate-offline-maps', 1);
+                request.onsuccess = () => {
+                  const db2 = request.result;
+                  const tx = db2.transaction('maps', 'readonly');
+                  const get = tx.objectStore('maps').get('__production_smoke__');
+                  get.onsuccess = () => { resolve(get.result); db2.close(); };
+                  get.onerror = () => { reject(get.error); db2.close(); };
+                };
+                request.onerror = () => reject(request.error);
+              });
+              if (!(persisted?.blob instanceof Blob) || persisted.blob.size !== blob.size) throw new Error('IndexedDB roundtrip changed the map blob');
+
+              const persistedBitmap = await createImageBitmap(persisted.blob);
+              if (persistedBitmap.width !== width || persistedBitmap.height !== height) throw new Error('persisted image dimensions changed');
+              persistedBitmap.close();
+
+              const objectUrl = URL.createObjectURL(persisted.blob);
+              try {
+                await new Promise((resolve, reject) => {
+                  const image = new Image();
+                  image.onload = resolve;
+                  image.onerror = () => reject(new Error('browser could not render persisted map'));
+                  image.src = objectUrl;
+                });
+              } finally {
+                URL.revokeObjectURL(objectUrl);
+              }
+
+              return { contentType, bytes: blob.size, width, height };
+            }, bbox);
+
+            await context.setOffline(true);
+
+            const offline = await page.evaluate(async () => {
+              const persisted = await new Promise((resolve, reject) => {
+                const request = indexedDB.open('encumbrate-offline-maps', 1);
+                request.onsuccess = () => {
+                  const db = request.result;
+                  const tx = db.transaction('maps', 'readonly');
+                  const get = tx.objectStore('maps').get('__production_smoke__');
+                  get.onsuccess = () => { resolve(get.result); db.close(); };
+                  get.onerror = () => { reject(get.error); db.close(); };
+                };
+                request.onerror = () => reject(request.error);
+              });
+              if (!(persisted?.blob instanceof Blob) || !persisted.blob.size) throw new Error('map missing after network cutoff');
+              const bitmap = await createImageBitmap(persisted.blob);
+              const width = bitmap.width, height = bitmap.height;
+              bitmap.close();
+              const url = URL.createObjectURL(persisted.blob);
+              try {
+                await new Promise((resolve, reject) => {
+                  const image = new Image();
+                  image.onload = resolve;
+                  image.onerror = () => reject(new Error('offline stored map did not render'));
+                  image.src = url;
+                });
+              } finally {
+                URL.revokeObjectURL(url);
+              }
+              return { bytes: persisted.blob.size, width, height };
+            });
+
+            console.log('PRODUCTION_OFFLINE_BROWSER_SMOKE_SUCCESS', JSON.stringify({ online, offline }));
+          } finally {
+            await browser.close();
+          }
+          NODE
