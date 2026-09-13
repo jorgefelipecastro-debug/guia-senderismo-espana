@@ -2,11 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {gpsFixFresh,gpsFixUsable,navigationHeading,nearestPolylinePoint,plausibleGpsTransition,routeProximity} from '../lib/navigation-geometry';
+import {downloadLiveOfflineMap,leafletBoundsFromMercator,readLiveOfflineMap} from '../lib/live-offline-map';
 
 export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
-  const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[following,setFollowing]=useState(true);
+  const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),offlineUrlRef=useRef(null),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[offlineMapState,setOfflineMapState]=useState('checking'),[following,setFollowing]=useState(true);
   useEffect(()=>{followingRef.current=following},[following]);
-  useEffect(()=>{let active=true;async function mount(){const L=(await import('leaflet')).default;if(!active||!nodeRef.current)return;const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).on('tileerror',()=>setTileError(true)).addTo(map);L.polyline(points,{color:'#063d2c',weight:10,opacity:.72}).addTo(map);L.polyline(points,{color:'#78d443',weight:6,opacity:1}).addTo(map);map.fitBounds(L.latLngBounds(points),{padding:[30,30]});L.control.zoom({position:'bottomright'}).addTo(map);map.on('dragstart',()=>setFollowing(false))}mount();return()=>{active=false;mapRef.current?.remove();mapRef.current=null}},[track.id]);
+  useEffect(()=>{
+    let active=true,offlineLayer=null,preparing=false;
+    const abort=new AbortController();
+    async function mount(){
+      const L=(await import('leaflet')).default;if(!active||!nodeRef.current)return;
+      const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;
+      if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='180';pane.style.pointerEvents='none'}
+      const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).on('tileerror',()=>setTileError(true)).on('load',()=>{if(navigator.onLine)setTileError(false)}).addTo(map);
+      L.polyline(points,{color:'#063d2c',weight:10,opacity:.72}).addTo(map);L.polyline(points,{color:'#78d443',weight:6,opacity:1}).addTo(map);map.fitBounds(L.latLngBounds(points),{padding:[30,30]});L.control.zoom({position:'bottomright'}).addTo(map);map.on('dragstart',()=>setFollowing(false));
+      async function prepareOffline(){
+        if(!active||preparing||offlineLayer)return;preparing=true;setOfflineMapState('checking');
+        try{
+          let record=await readLiveOfflineMap(track);
+          if(!record&&navigator.onLine){setOfflineMapState('preparing');record=await downloadLiveOfflineMap(track,{signal:abort.signal})}
+          if(!active||!record)return setOfflineMapState('missing');
+          const url=URL.createObjectURL(record.blob);offlineUrlRef.current=url;
+          offlineLayer=L.imageOverlay(url,leafletBoundsFromMercator(record.bounds),{pane:'offlineBasemap',opacity:1,interactive:false,attribution:'© Instituto Geográfico Nacional'}).addTo(map);
+          setOfflineMapState('ready');
+          try{await navigator.storage?.persist?.()}catch{}
+        }catch{if(active)setOfflineMapState('missing')}
+        finally{preparing=false}
+      }
+      const offline=()=>{setTileError(true);prepareOffline()},online=()=>{setTileError(false);prepareOffline()};
+      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);tiles.off()};
+      prepareOffline();
+    }
+    mount();
+    return()=>{active=false;abort.abort();mapRef.current?._encumbrateCleanup?.();mapRef.current?.remove();mapRef.current=null;if(offlineUrlRef.current){URL.revokeObjectURL(offlineUrlRef.current);offlineUrlRef.current=null}}
+  },[track.id]);
   useEffect(()=>{
     if(!navigator.geolocation){setGpsState('unsupported');return}
     previousFixRef.current=null;lastGoodAtRef.current=null;probeBlockedRef.current=false;
@@ -39,6 +68,6 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
     probe();
     return()=>{disposed=true;clearInterval(watchdog);clearInterval(probeTimer);document.removeEventListener('visibilitychange',onVisibility);navigator.geolocation.clearWatch(watch)}
   },[track.id]);
-  const statusTitle=gpsState==='searching'?'Buscando GPS…':gpsState==='unsupported'?'GPS no disponible':gpsState==='denied'?'Permiso de ubicación bloqueado':gpsState==='paused'?'Señal GPS interrumpida':gpsState==='weak'?'Precisión GPS insuficiente':gpsState==='on-track'?'Vas por el sendero':gpsState==='near'?'Cerca del trazado':gpsState==='uncertain'?'Posición aproximada':offRoute!==null?`A ${Math.round(offRoute)} m del sendero`:'Buscando GPS…',precisionLabel=position?(gpsState==='paused'||gpsState==='denied'||gpsState==='unsupported'?`Última precisión válida ±${Math.round(position.accuracy)} m`:`Precisión GPS ±${Math.round(position.accuracy)} m`):'Mantén la ubicación activada';
-  return <div className="liveGuide" role="dialog" aria-modal="true" aria-label={`Guía de ${route.name}`}><div ref={nodeRef} className="liveGuideMap"/><header><button onClick={onBack} aria-label="Volver">‹</button><div><small>NAVEGACIÓN ACTIVA</small><strong>{route.name}</strong></div></header><div className="liveGuideStatus"><span className={gpsState==='off-route'?'warning':'ok'}/><div><strong>{statusTitle}</strong><small>{precisionLabel}</small></div></div>{tileError&&<div className="liveGuideOffline">Sin cobertura cartográfica · el trazado verde y el GPS siguen activos</div>}<button className="recenterGuide" onClick={()=>{setFollowing(true);if(position)mapRef.current?.setView([position.lat,position.lon],16)}}>⌖ Centrarme</button><div className="liveGuideActions"><button onClick={onLost}>⚠ Estoy perdido</button><button onClick={onFinish}>Finalizar ruta</button></div></div>
+  const statusTitle=gpsState==='searching'?'Buscando ubicación…':gpsState==='unsupported'?'Ubicación no disponible':gpsState==='denied'?'Permiso de ubicación bloqueado':gpsState==='paused'?'Señal de ubicación interrumpida':gpsState==='weak'?'Precisión de ubicación insuficiente':gpsState==='on-track'?'Vas por el sendero':gpsState==='near'?'Cerca del trazado':gpsState==='uncertain'?'Posición aproximada':offRoute!==null?`A ${Math.round(offRoute)} m del sendero`:'Buscando ubicación…',precisionLabel=position?(gpsState==='paused'||gpsState==='denied'||gpsState==='unsupported'?`Última precisión válida ±${Math.round(position.accuracy)} m`:`Precisión de ubicación ±${Math.round(position.accuracy)} m`):'Mantén la ubicación activada',offlineLabel=offlineMapState==='preparing'?'Preparando mapa offline…':offlineMapState==='ready'?'Mapa offline preparado':offlineMapState==='missing'?'Mapa offline no disponible':null;
+  return <div className="liveGuide" role="dialog" aria-modal="true" aria-label={`Guía de ${route.name}`}><div ref={nodeRef} className="liveGuideMap"/><header><button onClick={onBack} aria-label="Volver">‹</button><div><small>NAVEGACIÓN ACTIVA</small><strong>{route.name}</strong></div></header><div className="liveGuideStatus"><span className={gpsState==='off-route'?'warning':'ok'}/><div><strong>{statusTitle}</strong><small>{precisionLabel}{offlineLabel?` · ${offlineLabel}`:''}</small></div></div>{tileError&&<div className="liveGuideOffline">{offlineMapState==='ready'?'Sin conexión · cartografía offline activa':'Sin conexión cartográfica · solo trazado disponible'}</div>}<button className="recenterGuide" onClick={()=>{setFollowing(true);if(position)mapRef.current?.setView([position.lat,position.lon],16)}}>⌖ Centrarme</button><div className="liveGuideActions"><button onClick={onLost}>⚠ Estoy perdido</button><button onClick={onFinish}>Finalizar ruta</button></div></div>
 }
