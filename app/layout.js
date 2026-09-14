@@ -1,7 +1,7 @@
 import './globals.css';
 import './startup.css';
 import 'leaflet/dist/leaflet.css';
-import AuthGate from './AuthGate';
+import AppGate from './AppGate';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 import ClientMonitoring from './ClientMonitoring';
 import SettingsRuntime from './SettingsRuntime';
@@ -39,7 +39,7 @@ export default function RootLayout({ children }) {
         <ClientMonitoring />
         <SettingsRuntime />
         <ServiceWorkerRegister />
-        <AuthGate>{children}</AuthGate>
+        <AppGate>{children}</AppGate>
         <footer className="globalLegalLinks">
           <a href="/privacidad">Privacidad</a>
           <a href="/terminos">Términos</a>
