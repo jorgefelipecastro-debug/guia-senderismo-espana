@@ -65,7 +65,7 @@ test('el proxy de mismo origen devuelve una imagen IGN válida y rechaza zonas i
   }
 });
 
-test('la navegación activa prioriza la capa local al cortar red y amplía cobertura hasta el usuario',async()=>{
+test('la navegación activa usa el mapa local también ante tileerror con navegador online',async()=>{
   const source=await readFile(new URL('../app/LiveRouteGuide.js',import.meta.url),'utf8');
   const storage=await readFile(new URL('../lib/live-offline-map.js',import.meta.url),'utf8');
   assert.match(source,/readLiveOfflineMap/);
@@ -73,9 +73,12 @@ test('la navegación activa prioriza la capa local al cortar red y amplía cober
   assert.match(source,/liveMapRecordCovers/);
   assert.match(source,/offlineBasemap/);
   assert.match(source,/zIndex='250'/);
-  assert.match(source,/tiles\?\.setOpacity\(offline\?0:1\)/);
-  assert.match(source,/offlineLayer\?\.setOpacity\(offline\?1:0\)/);
+  assert.match(source,/forceOffline\|\|!navigator\.onLine/);
+  assert.match(source,/\.on\('tileerror',\(\)=>\{tileCycleFailed=true;activateOfflineFallback\(\)\}\)/);
+  assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
+  assert.match(source,/offlineLayer\?\.setOpacity\(useOffline\?1:0\)/);
   assert.match(source,/extraPoints:extraPoint\?\[extraPoint\]:\[\]/);
+  assert.match(source,/Cartografía offline activa · mapa online no disponible/);
   assert.match(source,/Sin conexión · cartografía offline activa/);
   assert.match(source,/Precisión de ubicación/);
   assert.match(storage,/const persisted=await readLiveOfflineMap\(track\)/);
