@@ -7,12 +7,14 @@ on:
     paths:
       - '.github/workflows/production-offline-browser-smoke.yml'
       - 'app/AppGate.js'
-      - 'app/__offline-map-smoke/page.js'
+      - 'app/offline-map-smoke-e2e/page.js'
       - 'app/layout.js'
       - 'app/api/maps/offline/route.js'
       - 'app/api/release/route.js'
       - 'app/LiveRouteGuide.js'
       - 'lib/live-offline-map.js'
+      - 'package.json'
+      - 'scripts/start-standalone.mjs'
       - 'proxy.js'
       - 'tests/live-offline-map.test.mjs'
   workflow_dispatch:
@@ -82,7 +84,8 @@ jobs:
 
           try {
             await page.route('https://tile.openstreetmap.org/**', route => route.abort('failed'));
-            await page.goto(base + '/__offline-map-smoke', { waitUntil: 'domcontentloaded', timeout: 60000 });
+            const response = await page.goto(base + '/offline-map-smoke-e2e', { waitUntil: 'domcontentloaded', timeout: 60000 });
+            if (!response || response.status() !== 200) throw new Error(`E2E route returned ${response?.status() ?? 'no response'}`);
 
             await page.getByText('Mapa offline preparado', { exact: false }).waitFor();
             await page.getByText('Cartografía offline activa · mapa online no disponible', { exact: true }).waitFor();
