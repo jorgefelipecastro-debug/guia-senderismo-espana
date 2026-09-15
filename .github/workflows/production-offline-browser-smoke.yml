@@ -10,8 +10,10 @@ on:
       - 'app/__offline-map-smoke/page.js'
       - 'app/layout.js'
       - 'app/api/maps/offline/route.js'
+      - 'app/api/release/route.js'
       - 'app/LiveRouteGuide.js'
       - 'lib/live-offline-map.js'
+      - 'proxy.js'
       - 'tests/live-offline-map.test.mjs'
   workflow_dispatch:
 
@@ -50,7 +52,7 @@ jobs:
         run: |
           EXPECTED="${GITHUB_SHA:0:12}"
           for i in $(seq 1 60); do
-            RELEASE=$(curl -fsS "$BASE_URL/api/health" 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).release||'')}catch{}})" || true)
+            RELEASE=$(curl -fsS "$BASE_URL/api/release" 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).release||'')}catch{}})" || true)
             if [ "$RELEASE" = "$EXPECTED" ]; then
               echo "Railway is serving $RELEASE"
               exit 0
