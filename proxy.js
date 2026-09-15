@@ -4,7 +4,10 @@ import { rateLimitPolicy, clientAddress } from "./lib/api-rate-limit";
 import { getSupabaseAdmin } from "./lib/supabase-admin";
 
 function fingerprint(value) {
-  const secret = process.env.RATE_LIMIT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret =
+    process.env.RATE_LIMIT_SECRET ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) throw new Error("Rate-limit secret is not configured");
   return createHmac("sha256", secret).update(String(value)).digest("hex");
 }
