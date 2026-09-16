@@ -79,7 +79,7 @@ test('la navegación activa mantiene fallback offline hasta confirmar OSM establ
   assert.match(source,/\.on\('tileerror',failTileCycle\)/);
   assert.match(source,/\.on\('tileload',markTileProgress\)/);
   assert.match(source,/armTileFailureWatchdog\(\);/);
-  assert.match(source,/tileCycleSuccess<1/);
+  assert.match(source,/if\(tileCycleFailed\|\|tileCycleSuccess<1\)\{activateOfflineFallback\(\);return\}/);
   assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
   assert.match(source,/offlineLayer\?\.setOpacity\(useOffline\?1:0\)/);
   assert.match(source,/extraPoints:extraPoint\?\[extraPoint\]:\[\]/);
