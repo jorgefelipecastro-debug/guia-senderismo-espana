@@ -84,6 +84,28 @@ jobs:
           page.setDefaultTimeout(45000);
           let blockedOsmRequests = 0;
           const blockedOsmUrls = [];
+          const pageErrors = [];
+          const consoleErrors = [];
+          const failedRequests = [];
+
+          page.on('pageerror', error => {
+            pageErrors.push({ name: error.name, message: error.message, stack: error.stack });
+            console.log('E2E_PAGE_ERROR', error.stack || error.message);
+          });
+          page.on('console', message => {
+            if (message.type() === 'error') {
+              consoleErrors.push(message.text());
+              console.log('E2E_CONSOLE_ERROR', message.text());
+            }
+          });
+          page.on('requestfailed', request => {
+            const url = request.url();
+            if (!url.includes('tile.openstreetmap.org')) {
+              const failure = { url, errorText: request.failure()?.errorText || null };
+              failedRequests.push(failure);
+              console.log('E2E_REQUEST_FAILED', JSON.stringify(failure));
+            }
+          });
 
           try {
             await page.route('**/*', async route => {
@@ -102,7 +124,22 @@ jobs:
             const response = await page.goto(base + '/offline-map-smoke-e2e', { waitUntil: 'domcontentloaded', timeout: 60000 });
             if (!response || response.status() !== 200) throw new Error(`E2E route returned ${response?.status() ?? 'no response'}`);
 
-            await page.getByText('Mapa offline preparado', { exact: false }).waitFor();
+            try {
+              await page.getByText('Mapa offline preparado', { exact: false }).waitFor();
+            } catch (error) {
+              const startupDebug = await page.evaluate(() => ({
+                bodyText: document.body?.innerText?.slice(0, 2000) || '',
+                statusTitle: document.querySelector('.liveGuideStatus strong')?.textContent || null,
+                statusDetail: document.querySelector('.liveGuideStatus small')?.textContent || null,
+                offlineText: document.querySelector('.liveGuideOffline')?.textContent || null,
+                liveGuidePresent: Boolean(document.querySelector('.liveGuide')),
+                leafletPresent: Boolean(document.querySelector('.leaflet-container')),
+                ignPresent: Boolean(document.querySelector('.leaflet-image-layer')),
+                navigatorOnline: navigator.onLine,
+              }));
+              throw new Error(`Offline map never became ready: ${JSON.stringify({ startupDebug, pageErrors, consoleErrors, failedRequests })}`, { cause: error });
+            }
+
             await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length > 0 || document.querySelector('.liveGuideOffline'), null, { timeout: 15000 }).catch(() => {});
             if (blockedOsmRequests < 1) {
               const debug = await page.evaluate(() => ({
