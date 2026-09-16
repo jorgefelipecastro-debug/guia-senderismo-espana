@@ -18,6 +18,16 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;
       if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='250';pane.style.pointerEvents='none'}
 
+      const updateUserMarker=current=>{
+        if(!active||!current)return;
+        const icon=L.divIcon({className:'hikerArrowIcon',html:`<span style="transform:rotate(${current.heading}deg)">▲</span>`,iconSize:[44,44],iconAnchor:[22,22]});
+        if(!userRef.current)userRef.current=L.marker([current.lat,current.lon],{icon,zIndexOffset:1000}).addTo(map);
+        else userRef.current.setLatLng([current.lat,current.lon]).setIcon(icon);
+        if(followingRef.current)map.setView([current.lat,current.lon],Math.max(map.getZoom(),16),{animate:true});
+      };
+      map._encumbrateSetUserPosition=updateUserMarker;
+      if(positionRef.current)updateUserMarker(positionRef.current);
+
       const clearTileFailureTimer=()=>{if(tileFailureTimer){clearTimeout(tileFailureTimer);tileFailureTimer=null}};
       const clearHealthyRecoveryTimer=()=>{if(healthyRecoveryTimer){clearTimeout(healthyRecoveryTimer);healthyRecoveryTimer=null}};
       const applyNetworkLayerState=()=>{
@@ -109,12 +119,12 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
 
       const offline=()=>{clearTileFailureTimer();clearHealthyRecoveryTimer();forceOffline=true;setTileError(true);applyNetworkLayerState();prepareOffline(positionRef.current||null)};
       const online=()=>{forceOffline=true;setTileError(true);tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();applyNetworkLayerState();prepareOffline(positionRef.current||null);tiles?.redraw();armTileFailureWatchdog()};
-      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();ensureOfflineCoverageRef.current=null};
+      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();map._encumbrateSetUserPosition=null;ensureOfflineCoverageRef.current=null};
       await prepareOffline(positionRef.current||null);
       applyNetworkLayerState();
     }
     mount();
-    return()=>{active=false;abort.abort();mapRef.current?._encumbrateCleanup?.();mapRef.current?.remove();mapRef.current=null;offlineRecordRef.current=null;positionRef.current=null;if(offlineUrlRef.current){URL.revokeObjectURL(offlineUrlRef.current);offlineUrlRef.current=null}}
+    return()=>{active=false;abort.abort();mapRef.current?._encumbrateCleanup?.();mapRef.current?.remove();mapRef.current=null;userRef.current=null;offlineRecordRef.current=null;positionRef.current=null;if(offlineUrlRef.current){URL.revokeObjectURL(offlineUrlRef.current);offlineUrlRef.current=null}}
   },[track.id]);
   useEffect(()=>{
     if(!navigator.geolocation){setGpsState('unsupported');return}
@@ -135,8 +145,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       ensureOfflineCoverageRef.current?.(current);
       const near=nearestPolylinePoint(current,track.points),proximity=routeProximity(near?.distance??Infinity,current.accuracy);
       setOffRoute(near?.distance??null);setGpsState(proximity.status);
-      const map=mapRef.current;if(!map)return;
-      import('leaflet').then(module=>{if(disposed)return;const L=module.default,icon=L.divIcon({className:'hikerArrowIcon',html:`<span style="transform:rotate(${current.heading}deg)">▲</span>`,iconSize:[44,44],iconAnchor:[22,22]});if(!userRef.current)userRef.current=L.marker([current.lat,current.lon],{icon,zIndexOffset:1000}).addTo(map);else userRef.current.setLatLng([current.lat,current.lon]).setIcon(icon);if(followingRef.current)map.setView([current.lat,current.lon],Math.max(map.getZoom(),16),{animate:true})})
+      mapRef.current?._encumbrateSetUserPosition?.(current);
     };
     const probe=()=>{
       if(disposed||probeRunning)return;
