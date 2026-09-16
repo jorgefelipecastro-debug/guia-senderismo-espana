@@ -65,7 +65,7 @@ test('el proxy de mismo origen devuelve una imagen IGN válida y rechaza zonas i
   }
 });
 
-test('la navegación activa mantiene fallback offline hasta confirmar OSM estable',async()=>{
+test('la navegación activa mantiene fallback offline y conserva el marcador GPS aunque la posición llegue antes que Leaflet',async()=>{
   const source=await readFile(new URL('../app/LiveRouteGuide.js',import.meta.url),'utf8');
   const storage=await readFile(new URL('../lib/live-offline-map.js',import.meta.url),'utf8');
   assert.match(source,/readLiveOfflineMap/);
@@ -80,6 +80,10 @@ test('la navegación activa mantiene fallback offline hasta confirmar OSM establ
   assert.match(source,/\.on\('tileload',markTileProgress\)/);
   assert.match(source,/armTileFailureWatchdog\(\);/);
   assert.match(source,/if\(tileCycleFailed\|\|tileCycleSuccess<1\)\{activateOfflineFallback\(\);return\}/);
+  assert.match(source,/map\._encumbrateSetUserPosition=updateUserMarker/);
+  assert.match(source,/if\(positionRef\.current\)updateUserMarker\(positionRef\.current\)/);
+  assert.match(source,/mapRef\.current\?\._encumbrateSetUserPosition\?\.\(current\)/);
+  assert.doesNotMatch(source,/import\('leaflet'\)\.then\(module=>/);
   assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
   assert.match(source,/offlineLayer\?\.setOpacity\(useOffline\?1:0\)/);
   assert.match(source,/extraPoints:extraPoint\?\[extraPoint\]:\[\]/);
