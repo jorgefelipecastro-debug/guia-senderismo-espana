@@ -54,15 +54,14 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       const startTileCycle=()=>{
         tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();armTileFailureWatchdog();
       };
-      const markTileProgress=()=>{
-        tileCycleSuccess+=1;
-      };
+      const markTileProgress=()=>{tileCycleSuccess+=1};
       const failTileCycle=()=>{
         tileCycleFailed=true;tileCycleSuccess=0;clearTileFailureTimer();clearHealthyRecoveryTimer();activateOfflineFallback();
       };
       const finishTileCycle=()=>{
         clearTileFailureTimer();
-        if(!navigator.onLine||tileCycleFailed||tileCycleSuccess<1)return;
+        if(!navigator.onLine)return;
+        if(tileCycleFailed||tileCycleSuccess<1){activateOfflineFallback();return}
         scheduleHealthyRecovery();
       };
 
