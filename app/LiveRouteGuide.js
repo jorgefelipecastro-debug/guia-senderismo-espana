@@ -34,8 +34,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       }
 
       const armTileFailureWatchdog=()=>{
-        clearTileFailureTimer();
-        if(!active||!navigator.onLine)return;
+        if(tileFailureTimer||!active||!navigator.onLine)return;
         tileFailureTimer=setTimeout(()=>{
           tileFailureTimer=null;
           if(active&&navigator.onLine)activateOfflineFallback();
@@ -56,7 +55,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();armTileFailureWatchdog();
       };
       const markTileProgress=()=>{
-        tileCycleSuccess+=1;armTileFailureWatchdog();
+        tileCycleSuccess+=1;
       };
       const failTileCycle=()=>{
         tileCycleFailed=true;tileCycleSuccess=0;clearTileFailureTimer();clearHealthyRecoveryTimer();activateOfflineFallback();
