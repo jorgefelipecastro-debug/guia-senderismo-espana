@@ -4,17 +4,22 @@ import { useEffect, useRef, useState } from 'react';
 import {gpsFixFresh,gpsFixUsable,navigationHeading,nearestPolylinePoint,plausibleGpsTransition,routeProximity} from '../lib/navigation-geometry';
 import {downloadLiveOfflineMap,leafletBoundsFromMercator,liveMapRecordCovers,readLiveOfflineMap} from '../lib/live-offline-map';
 
+const OSM_TILE_STALL_MS=3500;
+const OSM_RECOVERY_MS=1200;
+
 export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
   const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),offlineUrlRef=useRef(null),offlineRecordRef=useRef(null),ensureOfflineCoverageRef=useRef(null),positionRef=useRef(null),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[offlineMapState,setOfflineMapState]=useState('checking'),[following,setFollowing]=useState(true);
   useEffect(()=>{followingRef.current=following},[following]);
   useEffect(()=>{
-    let active=true,offlineLayer=null,preparing=false,tiles=null,forceOffline=false,tileCycleFailed=false;
+    let active=true,offlineLayer=null,preparing=false,tiles=null,forceOffline=false,tileCycleFailed=false,tileCycleSuccess=0,tileFailureTimer=null,healthyRecoveryTimer=null;
     const abort=new AbortController();
     async function mount(){
       const L=(await import('leaflet')).default;if(!active||!nodeRef.current)return;
       const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;
       if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='250';pane.style.pointerEvents='none'}
 
+      const clearTileFailureTimer=()=>{if(tileFailureTimer){clearTimeout(tileFailureTimer);tileFailureTimer=null}};
+      const clearHealthyRecoveryTimer=()=>{if(healthyRecoveryTimer){clearTimeout(healthyRecoveryTimer);healthyRecoveryTimer=null}};
       const applyNetworkLayerState=()=>{
         const useOffline=forceOffline||!navigator.onLine;
         tiles?.setOpacity(useOffline?0:1);
@@ -22,22 +27,55 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       };
 
       async function activateOfflineFallback(){
+        if(!active)return;
         forceOffline=true;setTileError(true);applyNetworkLayerState();
         await prepareOffline(positionRef.current||null);
         applyNetworkLayerState();
       }
 
-      const finishHealthyTileCycle=()=>{
-        if(!navigator.onLine||tileCycleFailed)return;
-        forceOffline=false;setTileError(false);applyNetworkLayerState();
+      const armTileFailureWatchdog=()=>{
+        clearTileFailureTimer();
+        if(!active||!navigator.onLine)return;
+        tileFailureTimer=setTimeout(()=>{
+          tileFailureTimer=null;
+          if(active&&navigator.onLine)activateOfflineFallback();
+        },OSM_TILE_STALL_MS);
+      };
+
+      const scheduleHealthyRecovery=()=>{
+        clearHealthyRecoveryTimer();
+        if(!active||!navigator.onLine||tileCycleFailed||tileCycleSuccess<1)return;
+        healthyRecoveryTimer=setTimeout(()=>{
+          healthyRecoveryTimer=null;
+          if(!active||!navigator.onLine||tileCycleFailed||tileCycleSuccess<1)return;
+          forceOffline=false;setTileError(false);applyNetworkLayerState();
+        },OSM_RECOVERY_MS);
+      };
+
+      const startTileCycle=()=>{
+        tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();armTileFailureWatchdog();
+      };
+      const markTileProgress=()=>{
+        tileCycleSuccess+=1;armTileFailureWatchdog();
+      };
+      const failTileCycle=()=>{
+        tileCycleFailed=true;tileCycleSuccess=0;clearTileFailureTimer();clearHealthyRecoveryTimer();activateOfflineFallback();
+      };
+      const finishTileCycle=()=>{
+        clearTileFailureTimer();
+        if(!navigator.onLine||tileCycleFailed||tileCycleSuccess<1)return;
+        scheduleHealthyRecovery();
       };
 
       tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'})
-        .on('loading',()=>{tileCycleFailed=false})
-        .on('tileerror',()=>{tileCycleFailed=true;activateOfflineFallback()})
-        .on('load',finishHealthyTileCycle)
+        .on('loading',startTileCycle)
+        .on('tileloadstart',armTileFailureWatchdog)
+        .on('tileload',markTileProgress)
+        .on('tileerror',failTileCycle)
+        .on('load',finishTileCycle)
         .addTo(map);
       L.polyline(points,{color:'#063d2c',weight:10,opacity:.72}).addTo(map);L.polyline(points,{color:'#78d443',weight:6,opacity:1}).addTo(map);map.fitBounds(L.latLngBounds(points),{padding:[30,30]});L.control.zoom({position:'bottomright'}).addTo(map);map.on('dragstart',()=>setFollowing(false));
+      armTileFailureWatchdog();
 
       const installRecord=record=>{
         if(offlineLayer){map.removeLayer(offlineLayer);offlineLayer=null}
@@ -71,9 +109,9 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         if(navigator.onLine)await prepareOffline(current,true);
       };
 
-      const offline=()=>{forceOffline=true;setTileError(true);applyNetworkLayerState();prepareOffline(positionRef.current||null)};
-      const online=()=>{forceOffline=true;setTileError(true);applyNetworkLayerState();prepareOffline(positionRef.current||null);tiles?.redraw()};
-      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);tiles?.off();ensureOfflineCoverageRef.current=null};
+      const offline=()=>{clearTileFailureTimer();clearHealthyRecoveryTimer();forceOffline=true;setTileError(true);applyNetworkLayerState();prepareOffline(positionRef.current||null)};
+      const online=()=>{forceOffline=true;setTileError(true);tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();applyNetworkLayerState();prepareOffline(positionRef.current||null);tiles?.redraw();armTileFailureWatchdog()};
+      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();ensureOfflineCoverageRef.current=null};
       await prepareOffline(positionRef.current||null);
       applyNetworkLayerState();
     }

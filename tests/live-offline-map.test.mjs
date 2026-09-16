@@ -65,7 +65,7 @@ test('el proxy de mismo origen devuelve una imagen IGN válida y rechaza zonas i
   }
 });
 
-test('la navegación activa usa el mapa local también ante tileerror con navegador online',async()=>{
+test('la navegación activa mantiene fallback offline hasta confirmar OSM estable',async()=>{
   const source=await readFile(new URL('../app/LiveRouteGuide.js',import.meta.url),'utf8');
   const storage=await readFile(new URL('../lib/live-offline-map.js',import.meta.url),'utf8');
   assert.match(source,/readLiveOfflineMap/);
@@ -73,8 +73,13 @@ test('la navegación activa usa el mapa local también ante tileerror con navega
   assert.match(source,/liveMapRecordCovers/);
   assert.match(source,/offlineBasemap/);
   assert.match(source,/zIndex='250'/);
+  assert.match(source,/OSM_TILE_STALL_MS=3500/);
+  assert.match(source,/OSM_RECOVERY_MS=1200/);
   assert.match(source,/forceOffline\|\|!navigator\.onLine/);
-  assert.match(source,/\.on\('tileerror',\(\)=>\{tileCycleFailed=true;activateOfflineFallback\(\)\}\)/);
+  assert.match(source,/\.on\('tileerror',failTileCycle\)/);
+  assert.match(source,/\.on\('tileload',markTileProgress\)/);
+  assert.match(source,/armTileFailureWatchdog\(\);/);
+  assert.match(source,/tileCycleSuccess<1/);
   assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
   assert.match(source,/offlineLayer\?\.setOpacity\(useOffline\?1:0\)/);
   assert.match(source,/extraPoints:extraPoint\?\[extraPoint\]:\[\]/);
