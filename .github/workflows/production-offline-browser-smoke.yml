@@ -78,17 +78,59 @@ jobs:
             geolocation: { latitude: 38.3452, longitude: -0.4815, accuracy: 6 },
             permissions: ['geolocation'],
             viewport: { width: 390, height: 844 },
+            serviceWorkers: 'block',
           });
           const page = await context.newPage();
           page.setDefaultTimeout(45000);
+          let blockedOsmRequests = 0;
+          const blockedOsmUrls = [];
 
           try {
-            await page.route('https://tile.openstreetmap.org/**', route => route.abort('failed'));
+            await page.route('**/*', async route => {
+              const url = route.request().url();
+              let hostname = '';
+              try { hostname = new URL(url).hostname; } catch {}
+              if (hostname === 'tile.openstreetmap.org' || hostname.endsWith('.tile.openstreetmap.org')) {
+                blockedOsmRequests += 1;
+                if (blockedOsmUrls.length < 3) blockedOsmUrls.push(url);
+                await route.abort('failed');
+                return;
+              }
+              await route.continue();
+            });
+
             const response = await page.goto(base + '/offline-map-smoke-e2e', { waitUntil: 'domcontentloaded', timeout: 60000 });
             if (!response || response.status() !== 200) throw new Error(`E2E route returned ${response?.status() ?? 'no response'}`);
 
             await page.getByText('Mapa offline preparado', { exact: false }).waitFor();
-            await page.getByText('Cartografía offline activa · mapa online no disponible', { exact: true }).waitFor();
+            await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length > 0 || document.querySelector('.liveGuideOffline'), null, { timeout: 15000 }).catch(() => {});
+            if (blockedOsmRequests < 1) {
+              const debug = await page.evaluate(() => ({
+                navigatorOnline: navigator.onLine,
+                tileImages: [...document.querySelectorAll('.leaflet-tile-pane img')].slice(0,5).map(img => img.src),
+                offlineText: document.querySelector('.liveGuideOffline')?.textContent || null,
+              }));
+              throw new Error(`E2E did not intercept any OSM tile request: ${JSON.stringify(debug)}`);
+            }
+            console.log('OSM_E2E_BLOCK_CONFIRMED', JSON.stringify({ blockedOsmRequests, blockedOsmUrls }));
+
+            try {
+              await page.getByText('Cartografía offline activa · mapa online no disponible', { exact: true }).waitFor();
+            } catch (error) {
+              const debug = await page.evaluate(() => {
+                const image = document.querySelector('.leaflet-image-layer');
+                const tileLayer = document.querySelector('.leaflet-tile-pane .leaflet-layer');
+                return {
+                  navigatorOnline: navigator.onLine,
+                  offlineText: document.querySelector('.liveGuideOffline')?.textContent || null,
+                  ignPresent: Boolean(image),
+                  ignOpacity: image ? Number(getComputedStyle(image).opacity) : null,
+                  tileOpacity: tileLayer ? Number(getComputedStyle(tileLayer).opacity) : null,
+                  tileImages: [...document.querySelectorAll('.leaflet-tile-pane img')].slice(0,5).map(img => ({src:img.src,complete:img.complete,naturalWidth:img.naturalWidth})),
+                };
+              });
+              throw new Error(`Offline fallback status did not appear after ${blockedOsmRequests} blocked OSM requests: ${JSON.stringify(debug)}`, { cause: error });
+            }
             await page.locator('.hikerArrowIcon').waitFor();
 
             const onlineFallback = await page.evaluate(() => {
@@ -142,7 +184,7 @@ jobs:
             if (fullyOffline.visibleWidth <= 0 || fullyOffline.visibleHeight <= 0 || !fullyOffline.markerVisible)
               throw new Error(`map or location marker is not visible offline: ${JSON.stringify(fullyOffline)}`);
 
-            console.log('LIVE_ROUTE_GUIDE_OFFLINE_E2E_SUCCESS', JSON.stringify({ onlineFallback, fullyOffline }));
+            console.log('LIVE_ROUTE_GUIDE_OFFLINE_E2E_SUCCESS', JSON.stringify({ blockedOsmRequests, onlineFallback, fullyOffline }));
           } finally {
             await browser.close();
           }
