@@ -131,7 +131,19 @@ jobs:
               });
               throw new Error(`Offline fallback status did not appear after ${blockedOsmRequests} blocked OSM requests: ${JSON.stringify(debug)}`, { cause: error });
             }
-            await page.locator('.hikerArrowIcon').waitFor();
+
+            await context.setGeolocation({ latitude: 38.34521, longitude: -0.48149, accuracy: 6 });
+            try {
+              await page.locator('.hikerArrowIcon').waitFor({ timeout: 15000 });
+            } catch (error) {
+              const gpsDebug = await page.evaluate(() => ({
+                statusTitle: document.querySelector('.liveGuideStatus strong')?.textContent || null,
+                statusDetail: document.querySelector('.liveGuideStatus small')?.textContent || null,
+                geolocationAvailable: Boolean(navigator.geolocation),
+                navigatorOnline: navigator.onLine,
+              }));
+              throw new Error(`GPS marker did not appear after explicit geolocation update: ${JSON.stringify(gpsDebug)}`, { cause: error });
+            }
 
             const onlineFallback = await page.evaluate(() => {
               const image = document.querySelector('.leaflet-image-layer');
