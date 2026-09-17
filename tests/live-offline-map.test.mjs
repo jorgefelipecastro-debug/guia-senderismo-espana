@@ -82,6 +82,8 @@ test('la navegación activa mantiene fallback offline y conserva el marcador GPS
   assert.match(source,/if\(tileCycleFailed\|\|tileCycleSuccess<1\)\{activateOfflineFallback\(\);return\}/);
   assert.match(source,/map\._encumbrateSetUserPosition=updateUserMarker/);
   assert.match(source,/if\(positionRef\.current\)updateUserMarker\(positionRef\.current\)/);
+  assert.match(source,/const currentZoom=map\.getZoom\(\);map\.setView\(\[current\.lat,current\.lon\],Number\.isFinite\(currentZoom\)\?Math\.max\(currentZoom,16\):16/);
+  assert.doesNotMatch(source,/Math\.max\(map\.getZoom\(\),16\)/);
   assert.match(source,/mapRef\.current\?\._encumbrateSetUserPosition\?\.\(current\)/);
   assert.doesNotMatch(source,/import\('leaflet'\)\.then\(module=>/);
   assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
