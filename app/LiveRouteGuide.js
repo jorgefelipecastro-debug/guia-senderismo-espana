@@ -23,7 +23,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         const icon=L.divIcon({className:'hikerArrowIcon',html:`<span style="transform:rotate(${current.heading}deg)">▲</span>`,iconSize:[44,44],iconAnchor:[22,22]});
         if(!userRef.current)userRef.current=L.marker([current.lat,current.lon],{icon,zIndexOffset:1000}).addTo(map);
         else userRef.current.setLatLng([current.lat,current.lon]).setIcon(icon);
-        if(followingRef.current)map.setView([current.lat,current.lon],Math.max(map.getZoom(),16),{animate:true});
+        if(followingRef.current){const currentZoom=map.getZoom();map.setView([current.lat,current.lon],Number.isFinite(currentZoom)?Math.max(currentZoom,16):16,{animate:true})}
       };
       map._encumbrateSetUserPosition=updateUserMarker;
       if(positionRef.current)updateUserMarker(positionRef.current);
