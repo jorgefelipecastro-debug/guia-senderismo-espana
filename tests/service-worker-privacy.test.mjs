@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 const source = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
+const registerSource = await readFile(new URL('../app/ServiceWorkerRegister.js', import.meta.url), 'utf8');
 const origin = 'https://www.encumbrate.es';
 function harness() {
   const listeners = {}, stores = new Map(), calls = [];
@@ -93,4 +94,10 @@ test('cold offline navigation opens a self-contained viewer with all its modules
  for(const path of ['/offline/viewer.mjs','/offline/maps.mjs']) assert.equal((await h.dispatch('fetch',req(path))).status,200);
  const direct=await h.dispatch('fetch',{url:origin+'/offline.html?route=test',method:'GET',mode:'navigate',headers:new Headers()});
  assert.equal(await direct.text(),origin+'/offline.html');
+});
+
+
+test('el registro PWA tolera entornos que no devuelven ServiceWorkerRegistration',()=>{
+  assert.match(registerSource,/registration\?\.update\?\.\(\)/);
+  assert.doesNotMatch(registerSource,/registration\.update\(\)/);
 });
