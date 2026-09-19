@@ -12,7 +12,7 @@ export default function ServiceWorkerRegister() {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
-        .then((registration) => registration.update())
+        .then((registration) => registration?.update?.())
         .catch((error) => {
           console.error('No se pudo registrar el service worker:', error);
         });
