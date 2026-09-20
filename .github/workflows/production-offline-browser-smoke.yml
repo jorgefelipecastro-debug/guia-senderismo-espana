@@ -1,24 +1,6 @@
 name: Production Offline Browser Smoke
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/production-offline-browser-smoke.yml'
-      - 'app/AppGate.js'
-      - 'app/offline-map-smoke-e2e/page.js'
-      - 'app/layout.js'
-      - 'app/ServiceWorkerRegister.js'
-      - 'app/api/maps/offline/route.js'
-      - 'app/api/release/route.js'
-      - 'app/LiveRouteGuide.js'
-      - 'lib/live-offline-map.js'
-      - 'package.json'
-      - 'scripts/start-standalone.mjs'
-      - 'proxy.js'
-      - 'tests/live-offline-map.test.mjs'
-      - 'tests/service-worker-privacy.test.mjs'
   workflow_dispatch:
 
 permissions:
