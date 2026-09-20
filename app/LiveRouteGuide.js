@@ -11,7 +11,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
   const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),offlineUrlRef=useRef(null),offlineRecordRef=useRef(null),ensureOfflineCoverageRef=useRef(null),positionRef=useRef(null),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[offlineMapState,setOfflineMapState]=useState('checking'),[following,setFollowing]=useState(true);
   useEffect(()=>{followingRef.current=following},[following]);
   useEffect(()=>{
-    let active=true,offlineLayer=null,preparing=false,tiles=null,forceOffline=false,tileCycleFailed=false,tileCycleSuccess=0,tileFailureTimer=null,healthyRecoveryTimer=null;
+    let active=true,offlineLayer=null,preparing=false,queuedCoveragePoint=null,tiles=null,forceOffline=false,tileCycleFailed=false,tileCycleSuccess=0,tileFailureTimer=null,healthyRecoveryTimer=null;
     const abort=new AbortController();
     async function mount(){
       const L=(await import('leaflet')).default;if(!active||!nodeRef.current)return;
@@ -94,7 +94,12 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       };
 
       async function prepareOffline(extraPoint=null,force=false){
-        if(!active||preparing)return;preparing=true;setOfflineMapState('checking');
+        if(!active)return;
+        if(preparing){
+          if(extraPoint)queuedCoveragePoint=extraPoint;
+          return;
+        }
+        preparing=true;setOfflineMapState('checking');
         try{
           let record=await readLiveOfflineMap(track);
           const needsCoverage=extraPoint && (!record || !liveMapRecordCovers(record,extraPoint));
@@ -104,16 +109,26 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
           }
           if(!active||!record){setOfflineMapState('missing');return}
           installRecord(record);
-          setOfflineMapState(extraPoint&&!liveMapRecordCovers(record,extraPoint)?'missing':'ready');
+          const latestPoint=queuedCoveragePoint||positionRef.current||extraPoint;
+          const covered=!latestPoint||liveMapRecordCovers(record,latestPoint);
+          setOfflineMapState(covered?'ready':(navigator.onLine?'preparing':'missing'));
           try{await navigator.storage?.persist?.()}catch{}
         }catch{if(active)setOfflineMapState('missing')}
-        finally{preparing=false}
+        finally{
+          preparing=false;
+          const queued=queuedCoveragePoint;
+          queuedCoveragePoint=null;
+          if(queued&&active){
+            if(navigator.onLine)void ensureOfflineCoverageRef.current?.(queued);
+            else if(!offlineRecordRef.current||!liveMapRecordCovers(offlineRecordRef.current,queued))setOfflineMapState('missing');
+          }
+        }
       }
 
       ensureOfflineCoverageRef.current=async current=>{
         if(!active||!current)return;
         const record=offlineRecordRef.current||await readLiveOfflineMap(track);
-        if(record&&liveMapRecordCovers(record,current)){if(!offlineRecordRef.current)installRecord(record);return}
+        if(record&&liveMapRecordCovers(record,current)){if(!offlineRecordRef.current)installRecord(record);setOfflineMapState('ready');return}
         if(navigator.onLine)await prepareOffline(current,true);
       };
 
