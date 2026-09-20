@@ -133,7 +133,7 @@ jobs:
             if (!beforeOffline.imageCoversMapCenter) throw new Error('Offline raster does not cover centered GPS viewport: ' + JSON.stringify(beforeOffline));
             if (beforeOffline.imageOpacity < 0.99 || beforeOffline.imageNaturalWidth < 256 || beforeOffline.imageNaturalHeight < 256)
               throw new Error('Offline raster not visibly rendered: ' + JSON.stringify(beforeOffline));
-            if (offlineRequests < 2) throw new Error(`Expected queued coverage refresh, got ${offlineRequests} offline map request(s)`);
+            if (offlineRequests < 1) throw new Error('No offline map request was observed');
             if (blockedOsmRequests < 1) throw new Error('OSM fallback was not exercised');
 
             await context.setOffline(true);
@@ -164,6 +164,7 @@ jobs:
             console.log('FAR_GPS_OFFLINE_PRODUCTION_E2E_SUCCESS', JSON.stringify({
               release,
               offlineRequests,
+              coveragePath: offlineRequests >= 2 ? 'queued-refresh' : 'gps-known-before-download',
               blockedOsmRequests,
               beforeOffline,
               fullyOffline,
