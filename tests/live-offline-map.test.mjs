@@ -89,6 +89,10 @@ test('la navegación activa mantiene fallback offline y conserva el marcador GPS
   assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
   assert.match(source,/offlineLayer\?\.setOpacity\(useOffline\?1:0\)/);
   assert.match(source,/extraPoints:extraPoint\?\[extraPoint\]:\[\]/);
+  assert.match(source,/queuedCoveragePoint=null/);
+  assert.match(source,/if\(preparing\)\{\s*if\(extraPoint\)queuedCoveragePoint=extraPoint;/);
+  assert.match(source,/const queued=queuedCoveragePoint;\s*queuedCoveragePoint=null;/);
+  assert.match(source,/void ensureOfflineCoverageRef\.current\?\.\(queued\)/);
   assert.match(source,/Cartografía offline activa · mapa online no disponible/);
   assert.match(source,/Sin conexión · cartografía offline activa/);
   assert.match(source,/Precisión de ubicación/);
