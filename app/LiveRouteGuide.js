@@ -18,6 +18,20 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;
       if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='250';pane.style.pointerEvents='none'}
 
+      const viewportCoveragePoints=()=>{
+        if(!map||!Number.isFinite(map.getZoom()))return [];
+        const bounds=map.getBounds();
+        const padLat=Math.max(0.002,Math.abs(bounds.getNorth()-bounds.getSouth())*.2);
+        const padLon=Math.max(0.002,Math.abs(bounds.getEast()-bounds.getWest())*.2);
+        return [
+          {lat:bounds.getNorth()+padLat,lon:bounds.getWest()-padLon},
+          {lat:bounds.getNorth()+padLat,lon:bounds.getEast()+padLon},
+          {lat:bounds.getSouth()-padLat,lon:bounds.getWest()-padLon},
+          {lat:bounds.getSouth()-padLat,lon:bounds.getEast()+padLon},
+        ];
+      };
+      const recordCoversViewport=record=>viewportCoveragePoints().every(point=>liveMapRecordCovers(record,point,0));
+
       const updateUserMarker=current=>{
         if(!active||!current)return;
         const icon=L.divIcon({className:'hikerArrowIcon',html:`<span style="transform:rotate(${current.heading}deg)">▲</span>`,iconSize:[44,44],iconAnchor:[22,22]});
@@ -84,6 +98,8 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         .addTo(map);
       L.polyline(points,{color:'#063d2c',weight:10,opacity:.72}).addTo(map);L.polyline(points,{color:'#78d443',weight:6,opacity:1}).addTo(map);map.fitBounds(L.latLngBounds(points),{padding:[30,30]});L.control.zoom({position:'bottomright'}).addTo(map);map.on('dragstart',()=>setFollowing(false));
       armTileFailureWatchdog();
+      const onMoveEnd=()=>{if(positionRef.current)void ensureOfflineCoverageRef.current?.(positionRef.current)};
+      map.on('moveend zoomend resize',onMoveEnd);
 
       const installRecord=record=>{
         if(offlineLayer){map.removeLayer(offlineLayer);offlineLayer=null}
@@ -102,16 +118,20 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         preparing=true;setOfflineMapState('checking');
         try{
           let record=await readLiveOfflineMap(track);
-          const needsCoverage=extraPoint && (!record || !liveMapRecordCovers(record,extraPoint));
-          if((!record||needsCoverage||force)&&navigator.onLine){
+          const viewportPoints=viewportCoveragePoints();
+          const extraPoints=[...(extraPoint?[extraPoint]:[]),...viewportPoints];
+          const needsPointCoverage=extraPoint && (!record || !liveMapRecordCovers(record,extraPoint));
+          const needsViewportCoverage=viewportPoints.length>0 && (!record || !recordCoversViewport(record));
+          if((!record||needsPointCoverage||needsViewportCoverage||force)&&navigator.onLine){
             setOfflineMapState('preparing');
-            record=await downloadLiveOfflineMap(track,{signal:abort.signal,extraPoints:extraPoint?[extraPoint]:[]});
+            record=await downloadLiveOfflineMap(track,{signal:abort.signal,extraPoints});
           }
           if(!active||!record){setOfflineMapState('missing');return}
           installRecord(record);
           const latestPoint=queuedCoveragePoint||positionRef.current||extraPoint;
-          const covered=!latestPoint||liveMapRecordCovers(record,latestPoint);
-          setOfflineMapState(covered?'ready':(navigator.onLine?'preparing':'missing'));
+          const pointCovered=!latestPoint||liveMapRecordCovers(record,latestPoint);
+          const viewportCovered=recordCoversViewport(record);
+          setOfflineMapState(pointCovered&&viewportCovered?'ready':(navigator.onLine?'preparing':'missing'));
           try{await navigator.storage?.persist?.()}catch{}
         }catch{if(active)setOfflineMapState('missing')}
         finally{
@@ -128,13 +148,13 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
       ensureOfflineCoverageRef.current=async current=>{
         if(!active||!current)return;
         const record=offlineRecordRef.current||await readLiveOfflineMap(track);
-        if(record&&liveMapRecordCovers(record,current)){if(!offlineRecordRef.current)installRecord(record);setOfflineMapState('ready');return}
+        if(record&&liveMapRecordCovers(record,current)&&recordCoversViewport(record)){if(!offlineRecordRef.current)installRecord(record);setOfflineMapState('ready');return}
         if(navigator.onLine)await prepareOffline(current,true);
       };
 
       const offline=()=>{clearTileFailureTimer();clearHealthyRecoveryTimer();forceOffline=true;setTileError(true);applyNetworkLayerState();prepareOffline(positionRef.current||null)};
       const online=()=>{forceOffline=true;setTileError(true);tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();applyNetworkLayerState();prepareOffline(positionRef.current||null);tiles?.redraw();armTileFailureWatchdog()};
-      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();map._encumbrateSetUserPosition=null;ensureOfflineCoverageRef.current=null};
+      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();map.off('moveend zoomend resize',onMoveEnd);map._encumbrateSetUserPosition=null;ensureOfflineCoverageRef.current=null};
       await prepareOffline(positionRef.current||null);
       applyNetworkLayerState();
     }
@@ -174,5 +194,5 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
     return()=>{disposed=true;clearInterval(watchdog);clearInterval(probeTimer);document.removeEventListener('visibilitychange',onVisibility);navigator.geolocation.clearWatch(watch)}
   },[track.id]);
   const statusTitle=gpsState==='searching'?'Buscando ubicación…':gpsState==='unsupported'?'Ubicación no disponible':gpsState==='denied'?'Permiso de ubicación bloqueado':gpsState==='paused'?'Señal de ubicación interrumpida':gpsState==='weak'?'Precisión de ubicación insuficiente':gpsState==='on-track'?'Vas por el sendero':gpsState==='near'?'Cerca del trazado':gpsState==='uncertain'?'Posición aproximada':offRoute!==null?`A ${Math.round(offRoute)} m del sendero`:'Buscando ubicación…',precisionLabel=position?(gpsState==='paused'||gpsState==='denied'||gpsState==='unsupported'?`Última precisión válida ±${Math.round(position.accuracy)} m`:`Precisión de ubicación ±${Math.round(position.accuracy)} m`):'Mantén la ubicación activada',offlineLabel=offlineMapState==='preparing'?'Preparando mapa offline…':offlineMapState==='ready'?'Mapa offline preparado':offlineMapState==='missing'?'Mapa offline no disponible':null,networkOffline=typeof navigator!=='undefined'&&!navigator.onLine;
-  return <div className="liveGuide" role="dialog" aria-modal="true" aria-label={`Guía de ${route.name}`}><div ref={nodeRef} className="liveGuideMap"/><header><button onClick={onBack} aria-label="Volver">‹</button><div><small>NAVEGACIÓN ACTIVA</small><strong>{route.name}</strong></div></header><div className="liveGuideStatus"><span className={gpsState==='off-route'?'warning':'ok'}/><div><strong>{statusTitle}</strong><small>{precisionLabel}{offlineLabel?` · ${offlineLabel}`:''}</small></div></div>{tileError&&<div className="liveGuideOffline">{offlineMapState==='ready'?(networkOffline?'Sin conexión · cartografía offline activa':'Cartografía offline activa · mapa online no disponible'):'Sin conexión cartográfica · solo trazado disponible'}</div>}<button className="recenterGuide" onClick={()=>{setFollowing(true);if(position)mapRef.current?.setView([position.lat,position.lon],16)}}>⌖ Centrarme</button><div className="liveGuideActions"><button onClick={onLost}>⚠ Estoy perdido</button><button onClick={onFinish}>Finalizar ruta</button></div></div>
+  return <div className="liveGuide" role="dialog" aria-modal="true" aria-label={`Guía de ${route.name}`}><div ref={nodeRef} className="liveGuideMap"/><header><button onClick={onBack} aria-label="Volver">‹</button><div><small>NAVEGACIÓN ACTIVA</small><strong>{route.name}</strong></div></header><div className="liveGuideStatus"><span className={gpsState==='off-route'?'warning':'ok'}/><div><strong>{statusTitle}</strong><small>{precisionLabel}{offlineLabel?` · ${offlineLabel}`:''}</small></div></div>{tileError&&<div className="liveGuideOffline">{offlineMapState==='ready'?(networkOffline?'Sin conexión · cartografía offline activa':'Cartografía offline activa · mapa online no disponible'):'Sin conexión cartográfica · solo trazado disponible'}</div>}<button className="recenterGuide" onClick={()=>{setFollowing(true);if(position){mapRef.current?.setView([position.lat,position.lon],16);setTimeout(()=>ensureOfflineCoverageRef.current?.(position),0)}}}>⌖ Centrarme</button><div className="liveGuideActions"><button onClick={onLost}>⚠ Estoy perdido</button><button onClick={onFinish}>Finalizar ruta</button></div></div>
 }
