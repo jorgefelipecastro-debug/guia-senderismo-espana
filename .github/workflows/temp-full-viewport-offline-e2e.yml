@@ -1,0 +1,131 @@
+name: Temporary Full Viewport Offline E2E
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/temp-full-viewport-offline-e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  full-viewport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install Chromium runtime
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Verify full viewport offline coverage in production
+        env:
+          BASE_URL: https://encumbrate-web-production.up.railway.app
+          EXPECTED_RELEASE: c6a15911dc2b
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+
+          const base = process.env.BASE_URL;
+          const expected = process.env.EXPECTED_RELEASE;
+          const releaseResponse = await fetch(base + '/api/release');
+          if (!releaseResponse.ok) throw new Error('release endpoint failed: ' + releaseResponse.status);
+          const release = (await releaseResponse.json()).release;
+          if (release !== expected) throw new Error(`Expected release ${expected}, got ${release}`);
+
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({
+            geolocation: { latitude: 38.4400, longitude: -0.4815, accuracy: 6 },
+            permissions: ['geolocation'],
+            viewport: { width: 390, height: 844 },
+            serviceWorkers: 'block',
+          });
+          const page = await context.newPage();
+          page.setDefaultTimeout(45000);
+          let blockedOsmRequests = 0;
+
+          await page.route('**/*', async route => {
+            const url = route.request().url();
+            let hostname = '';
+            try { hostname = new URL(url).hostname; } catch {}
+            if (hostname === 'tile.openstreetmap.org' || hostname.endsWith('.tile.openstreetmap.org')) {
+              blockedOsmRequests += 1;
+              await route.abort('failed');
+              return;
+            }
+            await route.continue();
+          });
+
+          const fullCoverage = () => page.evaluate(() => {
+            const map = document.querySelector('.liveGuideMap');
+            const image = document.querySelector('.leaflet-image-layer');
+            const marker = document.querySelector('.hikerArrowIcon');
+            if (!map || !image || !marker) throw new Error('map/image/marker missing');
+            const mr = map.getBoundingClientRect();
+            const ir = image.getBoundingClientRect();
+            const tolerance = 2;
+            return {
+              map: {left:mr.left,top:mr.top,right:mr.right,bottom:mr.bottom,width:mr.width,height:mr.height},
+              image: {left:ir.left,top:ir.top,right:ir.right,bottom:ir.bottom,width:ir.width,height:ir.height},
+              coversViewport:
+                ir.left <= mr.left + tolerance &&
+                ir.top <= mr.top + tolerance &&
+                ir.right >= mr.right - tolerance &&
+                ir.bottom >= mr.bottom - tolerance,
+              opacity: Number(getComputedStyle(image).opacity),
+              naturalWidth: image.naturalWidth,
+              naturalHeight: image.naturalHeight,
+              markerVisible: Boolean(marker),
+              navigatorOnline: navigator.onLine,
+            };
+          });
+
+          try {
+            const response = await page.goto(base + '/offline-map-smoke-e2e', { waitUntil: 'domcontentloaded', timeout: 60000 });
+            if (!response || response.status() !== 200) throw new Error('E2E route failed');
+
+            await page.getByText('Mapa offline preparado', { exact: false }).waitFor();
+            await page.getByText('Cartografía offline activa · mapa online no disponible', { exact: true }).waitFor();
+            await page.locator('.hikerArrowIcon').waitFor();
+            await page.waitForTimeout(1200);
+
+            const onlineFallback = await fullCoverage();
+            if (!onlineFallback.coversViewport)
+              throw new Error('IGN raster does not cover full mobile viewport before cutoff: ' + JSON.stringify(onlineFallback));
+            if (onlineFallback.opacity < 0.99 || onlineFallback.naturalWidth < 256 || onlineFallback.naturalHeight < 256)
+              throw new Error('IGN raster not visibly rendered before cutoff: ' + JSON.stringify(onlineFallback));
+            if (blockedOsmRequests < 1) throw new Error('OSM fallback was not exercised');
+
+            await context.setOffline(true);
+            await page.getByText('Sin conexión · cartografía offline activa', { exact: true }).waitFor();
+            await page.waitForTimeout(1200);
+
+            const fullyOffline = await fullCoverage();
+            if (fullyOffline.navigatorOnline) throw new Error('Browser did not enter offline mode');
+            if (!fullyOffline.coversViewport || fullyOffline.opacity < 0.99 || !fullyOffline.markerVisible)
+              throw new Error('Full viewport coverage did not survive cutoff: ' + JSON.stringify(fullyOffline));
+
+            console.log('FULL_VIEWPORT_OFFLINE_E2E_SUCCESS', JSON.stringify({
+              release,
+              blockedOsmRequests,
+              onlineFallback,
+              fullyOffline,
+            }));
+          } finally {
+            await browser.close();
+          }
+          NODE
