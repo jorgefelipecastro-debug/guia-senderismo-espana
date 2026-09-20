@@ -88,7 +88,12 @@ test('la navegación activa mantiene fallback offline y conserva el marcador GPS
   assert.doesNotMatch(source,/import\('leaflet'\)\.then\(module=>/);
   assert.match(source,/tiles\?\.setOpacity\(useOffline\?0:1\)/);
   assert.match(source,/offlineLayer\?\.setOpacity\(useOffline\?1:0\)/);
-  assert.match(source,/extraPoints:extraPoint\?\[extraPoint\]:\[\]/);
+  assert.match(source,/viewportCoveragePoints/);
+  assert.match(source,/recordCoversViewport/);
+  assert.match(source,/const extraPoints=\[\.\.\.\(extraPoint\?\[extraPoint\]:\[\]\),\.\.\.viewportPoints\]/);
+  assert.match(source,/needsViewportCoverage/);
+  assert.match(source,/recordCoversViewport\(record\)/);
+  assert.match(source,/map\.on\('moveend zoomend resize',onMoveEnd\)/);
   assert.match(source,/queuedCoveragePoint=null/);
   assert.match(source,/if\(preparing\)\{\s*if\(extraPoint\)queuedCoveragePoint=extraPoint;/);
   assert.match(source,/const queued=queuedCoveragePoint;\s*queuedCoveragePoint=null;/);
