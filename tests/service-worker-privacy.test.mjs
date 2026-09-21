@@ -39,9 +39,9 @@ function harness() {
 const req = (path, headers={}) => new Request(new URL(path,origin), {headers});
 test('upgrade purges owned legacy caches and preserves other apps', async()=>{
   const h=harness();
-  for(const name of ['encumbrate-v13','encumbrate-v12','cumbre-v1','allzone-v1','encumbrate-public-v18']) await h.caches.open(name);
+  for(const name of ['encumbrate-v13','encumbrate-v12','cumbre-v1','allzone-v1','encumbrate-public-v19']) await h.caches.open(name);
   await h.dispatch('activate');
-  assert.deepEqual(await h.caches.keys(), ['allzone-v1','encumbrate-public-v18']); assert.equal(h.claimed,true);
+  assert.deepEqual(await h.caches.keys(), ['allzone-v1','encumbrate-public-v19']); assert.equal(h.claimed,true);
 });
 test('shell is anonymous, public and never copied from user navigation', async()=>{
   const h=harness(); await h.dispatch('install');
@@ -54,7 +54,7 @@ test('shell is anonymous, public and never copied from user navigation', async()
 });
 test('private shell does not block activation and is never cached',async()=>{
   const h=harness();h.response=()=>new Response('secret',{headers:{'cache-control':'private, no-store'}});
-  await assert.rejects(h.dispatch('install'));assert.equal(h.stores.get('encumbrate-public-v18').size,0);
+  await assert.rejects(h.dispatch('install'));assert.equal(h.stores.get('encumbrate-public-v19').size,0);
 });
 test('APIs, cross-origin media, tokens and RSC never use cached responses even across account changes',async()=>{
   const h=harness(), cache=await h.caches.open('encumbrate-v13');
@@ -84,7 +84,7 @@ test('cache quota failure does not turn a successful request into failure',async
 test('asset limit preserves the anonymous shell',async()=>{
   const h=harness();await h.dispatch('install');
   for(let i=0;i<165;i++) await h.dispatch('fetch',req(`/_next/static/${i}.js`));
-  const c=await h.caches.open('encumbrate-public-v18');assert.equal((await c.keys()).length,170);assert.ok(await c.match('/'));
+  const c=await h.caches.open('encumbrate-public-v19');assert.equal((await c.keys()).length,170);assert.ok(await c.match('/'));
 });
 
 test('cold offline navigation opens a self-contained viewer with all its modules cached',async()=>{
