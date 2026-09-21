@@ -30,9 +30,9 @@ test('las APIs operativas permiten CORS limitado y no wildcard',async()=>{
   assert.doesNotMatch(cors,/Access-Control-Allow-Origin[^\n]*\*/);
 });
 
-test('el modo offline cachea el cliente Railway v26',async()=>{
+test('el modo offline cachea el cliente Railway v27',async()=>{
   const worker=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-  assert.match(worker,/encumbrate-public-v26/);
+  assert.match(worker,/encumbrate-public-v27/);
   assert.match(worker,/\/offline\/api\.mjs/);
 });
 
