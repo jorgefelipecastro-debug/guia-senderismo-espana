@@ -11,7 +11,7 @@ export default function ServiceWorkerRegister() {
     let refreshing = false;
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=21', { updateViaCache: 'none' })
+      navigator.serviceWorker.register('/sw.js?v=22', { updateViaCache: 'none' })
         .then((registration) => registration?.update?.())
         .catch((error) => {
           console.error('No se pudo registrar el service worker:', error);
