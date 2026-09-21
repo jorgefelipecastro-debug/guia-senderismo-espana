@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bearingDegrees,breadcrumbReturn,distanceMetres,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from '../public/offline/nav.mjs';
+import {accessPathState,bearingDegrees,breadcrumbReturn,distanceMetres,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from '../public/offline/nav.mjs';
 
 test('calcula distancia y rumbo al inicio sin internet',()=>{
   const from={lat:38.35,lon:-0.50},to={lat:38.36,lon:-0.49};
@@ -49,4 +49,31 @@ test('los tramos separados no crean un sendero imaginario entre ellos',()=>{
   const between={lat:38.005,lon:-0.9945};
   const result=routeMetricsSegments(between,segments,10);
   assert.ok(result.distance>500);
+});
+
+
+test('acceso peatonal offline conserva el camino guardado y calcula lo restante',()=>{
+  const path=[
+    {lat:38.4000,lon:-0.5000},
+    {lat:38.4010,lon:-0.5000},
+    {lat:38.4020,lon:-0.4990},
+    {lat:38.4030,lon:-0.4980},
+  ];
+  const current={lat:38.40105,lon:-0.50002};
+  const state=accessPathState(current,path,10);
+  assert.equal(state.valid,true);
+  assert.ok(state.remaining.length>=3);
+  assert.ok(state.remainingM>150);
+});
+
+test('acceso peatonal offline rechaza posiciones alejadas y no inventa un atajo',()=>{
+  const path=[
+    {lat:38.4000,lon:-0.5000},
+    {lat:38.4010,lon:-0.5000},
+    {lat:38.4020,lon:-0.4990},
+  ];
+  const far={lat:38.4100,lon:-0.4900};
+  const state=accessPathState(far,path,10);
+  assert.equal(state.valid,false);
+  assert.ok(state.nearest.distance>100);
 });

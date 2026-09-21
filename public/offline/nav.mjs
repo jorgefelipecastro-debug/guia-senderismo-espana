@@ -94,3 +94,16 @@ export function routeMetricsSegments(position,segments,accuracy=20){
   }
   return best;
 }
+
+
+export function accessPathState(current,points,accuracy=60){
+  if(!current||!Array.isArray(points)||points.length<2)return null;
+  const nearest=nearestPolylinePoint(current,points);
+  if(!nearest)return null;
+  const maxSnap=Math.max(35,Math.min(100,Number(accuracy||0)*1.5||60));
+  const valid=nearest.distance<=maxSnap;
+  const remaining=[nearest.point,...points.slice(nearest.index+1)];
+  let remainingM=0;
+  for(let i=1;i<remaining.length;i++)remainingM+=distanceMetres(remaining[i-1],remaining[i]);
+  return{nearest,valid,maxSnap,remaining,remainingM};
+}

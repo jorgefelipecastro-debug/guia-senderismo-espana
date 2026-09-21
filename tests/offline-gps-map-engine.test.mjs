@@ -43,5 +43,5 @@ test('visor usa teselas interactivas, gestos y seguimiento GPS',async()=>{
   assert.match(html,/id="gpsMapCanvas"/);
   assert.match(html,/touch-action:none/);
   assert.match(worker,/offline\/tile-map\.mjs/);
-  assert.match(worker,/encumbrate-public-v21/);
+  assert.match(worker,/encumbrate-public-v22/);
 });
