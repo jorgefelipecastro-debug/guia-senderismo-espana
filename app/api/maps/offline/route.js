@@ -1,3 +1,4 @@
+import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors";
 const MAX_BYTES = 10 * 1024 * 1024;
 const TILE_MAX_BYTES = 1024 * 1024;
 const SIZE = 2048;
@@ -83,12 +84,16 @@ export async function GET(request) {
       isTile=true;
       label=`z${z}/x${x}/y${y}`;
     } else bounds=parseBounds(params.get('bbox'));
-  } catch { return Response.json({error:'Zona de mapa no valida.'},{status:400}); }
+  } catch { return withOperationalCors(request,Response.json({error:'Zona de mapa no valida.'},{status:400}),'GET, OPTIONS'); }
   try {
     const {bytes,type,attempts}=await fetchIgnImage(bounds,size,maxBytes,label);
-    return new Response(bytes,{status:200,headers:{'Content-Type':type,'Content-Length':String(bytes.byteLength),'Cache-Control':isTile?'public, max-age=2592000, stale-while-revalidate=7776000':'public, max-age=86400, stale-while-revalidate=604800','X-Content-Type-Options':'nosniff','X-Encumbrate-IGN-Attempts':String(attempts),...(isTile?{'X-Encumbrate-Offline-Tile':'1'}:{})}});
+    return withOperationalCors(request,new Response(bytes,{status:200,headers:{'Content-Type':type,'Content-Length':String(bytes.byteLength),'Cache-Control':isTile?'public, max-age=2592000, stale-while-revalidate=7776000':'public, max-age=86400, stale-while-revalidate=604800','X-Content-Type-Options':'nosniff','X-Encumbrate-IGN-Attempts':String(attempts),...(isTile?{'X-Encumbrate-Offline-Tile':'1'}:{})}}),'GET, OPTIONS');
   } catch(error) {
     console.error('Offline map proxy failed',error?.details||{label,message:error?.message});
-    return Response.json({error:'El servidor cartografico esta respondiendo de forma temporalmente irregular. Encumbrate reintentara la descarga.'},{status:503,headers:{'Cache-Control':'no-store','Retry-After':'2'}});
+    return withOperationalCors(request,Response.json({error:'El servidor cartografico esta respondiendo de forma temporalmente irregular. Encumbrate reintentara la descarga.'},{status:503,headers:{'Cache-Control':'no-store','Retry-After':'2'}}),'GET, OPTIONS');
   }
+}
+
+export async function OPTIONS(request) {
+  return operationalOptions(request, 'GET, OPTIONS');
 }
