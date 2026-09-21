@@ -1,3 +1,4 @@
+import { operationalApiUrl } from './api.mjs';
 const DB_NAME='encumbrate-offline-mosaic';
 const DB_VERSION=1;
 const TILE_STORE='tiles';
@@ -111,7 +112,7 @@ export async function renderMosaicForBounds(bounds,{size=2048,createCanvas=()=>d
 }
 
 
-const routeDetailTileUrl=tile=>`/api/maps/offline?z=${tile.z}&x=${tile.x}&y=${tile.y}&size=256`;
+const routeDetailTileUrl=tile=>operationalApiUrl(`/api/maps/offline?z=${tile.z}&x=${tile.x}&y=${tile.y}&size=256`);
 const txDone=tx=>new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||Error('No se pudo guardar la cartografía.'));});
 async function getRecord(db,store,key){return req(db.transaction(store,'readonly').objectStore(store).get(key));}
 async function putRecord(db,store,value){const tx=db.transaction(store,'readwrite');tx.objectStore(store).put(value);await txDone(tx);}
@@ -136,7 +137,7 @@ export async function downloadRouteDetail(track,{signal,onProgress,fetcher=fetch
         if(packIds.length!==(record.packIds||[]).length)await putRecord(db,TILE_STORE,{...record,packIds});
         bytes+=record.blob.size;
       }else{
-        const response=await fetcher(routeDetailTileUrl(tile),{cache:'no-store',credentials:'same-origin',signal});
+        const response=await fetcher(routeDetailTileUrl(tile),{cache:'no-store',credentials:'omit',signal});
         if(!response.ok||!response.headers.get('content-type')?.startsWith('image/'))throw Error(`No se ha podido descargar una parte del detalle (HTTP ${response.status||'desconocido'}).`);
         const blob=await response.blob();
         if(!blob.size||blob.size>1024*1024)throw Error('Una tesela del detalle no es válida.');
