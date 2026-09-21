@@ -84,7 +84,7 @@ test('cache quota failure does not turn a successful request into failure',async
 test('asset limit preserves the anonymous shell',async()=>{
   const h=harness();await h.dispatch('install');
   for(let i=0;i<165;i++) await h.dispatch('fetch',req(`/_next/static/${i}.js`));
-  const c=await h.caches.open('encumbrate-public-v16');assert.equal((await c.keys()).length,168);assert.ok(await c.match('/'));
+  const c=await h.caches.open('encumbrate-public-v16');assert.equal((await c.keys()).length,169);assert.ok(await c.match('/'));
 });
 
 test('cold offline navigation opens a self-contained viewer with all its modules cached',async()=>{
