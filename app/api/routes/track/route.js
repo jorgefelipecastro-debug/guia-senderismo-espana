@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { simplifyTrack } from "../../../../lib/navigation-geometry";
-import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors";
+import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors.js";
 import { flattenSegments, resolveRouteGeometry, routeDistanceKm } from "../../../../lib/route-geometry";
 
 export const dynamic = "force-dynamic";
