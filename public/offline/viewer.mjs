@@ -63,9 +63,49 @@ function updateNavigation(current){
 }
 
 function stopGPS(){if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;$('position').setAttribute('hidden','');$('gps').textContent='Mostrar mi posición';}
-function render(){
+function centerOnPoint(point){
+  if(!point||!bounds)return;
+  const p=pixel(point,bounds),viewport=$('viewport');
+  const x=p.x/SIZE*$('map').scrollWidth,y=p.y/SIZE*$('map').scrollHeight;
+  viewport.scrollTo({left:Math.max(0,x-viewport.clientWidth/2),top:Math.max(0,y-viewport.clientHeight/2),behavior:'smooth'});
+}
+function updatePositionMarker(){
+  if(!position||!bounds)return;
+  const p=pixel(position,bounds),fresh=Date.now()-position.at<45000,inside=p.x>=0&&p.x<=SIZE&&p.y>=0&&p.y<=SIZE;
+  $('position').toggleAttribute('hidden',!inside||!fresh);
+  $('position').setAttribute('cx',p.x);$('position').setAttribute('cy',p.y);
+  $('gpsStatus').textContent=!fresh?'La posición GPS está desactualizada.':!inside?'Tu posición está fuera de esta vista. Reencuadrando el mapa…':'GPS activo · precisión aproximada ±'+Math.round(position.accuracy)+' m'+(position.accuracy>50?' · señal imprecisa':'');
+}
+async function ensureNavigationFrame(force=false){
+  if(!position||!track||navMode==='idle'||viewBusy)return;
+  const metrics=routeMetrics(position,track.points,position.accuracy);
+  if(!metrics)return;
+  if(!force&&bounds&&boundsContainPoint(bounds,position,.12)&&lastViewPoint&&distanceMetres(lastViewPoint,position)<250)return;
+  let points=[];
+  if(navMode==='toStart')points=[position,track.points[0]];
+  else if(navMode==='lost'){
+    const back=returnGuidePoints();
+    points=back.length>1?back:[position,metrics.point];
+  }else{
+    const from=Math.max(0,metrics.index-18),to=Math.min(track.points.length,metrics.index+20);
+    points=[position,...track.points.slice(from,to)];
+    if(metrics.distance>250)points.push(metrics.point);
+  }
+  try{
+    const target=squareBoundsForPoints(points,{paddingRatio:.22,minPadding:650,minSpan:2200,maxSpan:65000});
+    viewBusy=true;
+    const mosaic=await renderMosaicForBounds(target);
+    if(mosaic?.blob?.size){
+      navigationRecord=mosaic;lastViewPoint={lat:position.lat,lon:position.lon};
+      render(false);updatePositionMarker();
+      if(force||navMode!=='route')centerOnPoint(position);
+    }
+  }catch(error){console.warn('No se pudo reencuadrar el mapa offline',error);}
+  finally{viewBusy=false;}
+}
+function render(resetZoom=true){
   if(imageURL)URL.revokeObjectURL(imageURL);imageURL=null;
-  const source=record||mosaicRecord;
+  const source=navigationRecord||record||mosaicRecord;
   if(source){bounds=source.bounds;imageURL=URL.createObjectURL(source.blob);$('background').setAttribute('href',imageURL);}
   else {$('background').removeAttribute('href');try {bounds=mapBounds(track);}catch {
     const ps=track.points.map(p=>({lat:p.lat,lon:p.lon}));
@@ -74,7 +114,11 @@ function render(){
     const lo=project(min),hi=project(max);bounds=[lo.x-1000,lo.y-1000,hi.x+1000,hi.y+1000];
   }}
   $('trail').setAttribute('d',track.points.map((p,i)=>{const q=pixel(p,bounds);return `${i?'L':'M'}${q.x.toFixed(2)} ${q.y.toFixed(2)}`;}).join(' '));
-  if(record){
+  const start=pixel(track.points[0],bounds);$('startPoint').setAttribute('cx',start.x);$('startPoint').setAttribute('cy',start.y);
+  if(navigationRecord){
+    const names=navigationRecord.packNames?.length?navigationRecord.packNames.join(', '):'cartografía offline';
+    $('mapStatus').textContent=`Mapa interactivo offline · ${names}`;
+  }else if(record){
     $('mapStatus').textContent=`Mapa de ruta y trazado guardados · ${(record.blob.size/1048576).toFixed(1)} MB · ${new Date(record.savedAt).toLocaleDateString('es-ES')}`;
   }else if(mosaicRecord){
     const names=mosaicRecord.packNames?.length?mosaicRecord.packNames.join(', '):'cartografía territorial descargada';
@@ -83,11 +127,11 @@ function render(){
   }else{
     $('mapStatus').textContent='Solo trazado disponible. Descarga el mapa para ver el terreno sin conexión.';
   }
-  $('attribution').hidden=!source;$('remove').hidden=!record;zoom=1;setZoom();drawNavigation();
+  $('attribution').hidden=!source;$('remove').hidden=!record;if(resetZoom){zoom=1;setZoom();}drawNavigation();updatePositionMarker();
 }
 async function select(){
   const version=++selection;controller?.abort();stopGPS();position=null;setNavMode('idle','Activa el GPS o inicia una guía offline.');track=tracks.find(t=>t.id===$('routes').value);if(!track)return;
-  $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;mosaicRecord=null;breadcrumbs=loadBreadcrumbs();
+  $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;mosaicRecord=null;navigationRecord=null;lastViewPoint=null;breadcrumbs=loadBreadcrumbs();
   try {
     const saved=await readMap(track.id);
     if(version!==selection)return;
@@ -109,14 +153,16 @@ $('routes').addEventListener('change',select);select();
 $('download').onclick=async()=>{
   if(controller || !track)return;const current=track,version=selection;controller=new AbortController();
   const active=controller,timer=setTimeout(()=>active.abort(),45000);$('cancel').hidden=false;connection();$('downloadStatus').textContent='Descargando y comprobando el mapa del IGN…';
-  try {const saved=await downloadMap(current,{signal:active.signal});if(version!==selection)return;record=saved;mosaicRecord=null;render();$('downloadStatus').textContent='Descarga completa y guardada. Puedes comprobarla en modo avión.';try{await navigator.storage?.persist?.();}catch{}}
+  try {const saved=await downloadMap(current,{signal:active.signal});if(version!==selection)return;record=saved;mosaicRecord=null;navigationRecord=null;render();$('downloadStatus').textContent='Descarga completa y guardada. Puedes comprobarla en modo avión.';try{await navigator.storage?.persist?.();}catch{}}
   catch(error){if(version===selection)$('downloadStatus').textContent=active.signal.aborted?'Descarga interrumpida. Puedes reintentar; el mapa anterior se conserva.':error.name==='QuotaExceededError'?'No hay espacio suficiente. Elimina un mapa que ya no necesites.':error.message;}
   finally{clearTimeout(timer);controller=null;$('cancel').hidden=true;connection();}
 };
 $('cancel').onclick=()=>controller?.abort();
 $('remove').onclick=async()=>{const id=track.id,version=selection;try {await removeMap(id);if(version===selection){record=null;try{mosaicRecord=await renderMosaicForBounds(mapBounds(track));}catch{mosaicRecord=null;}render();$('downloadStatus').textContent=mosaicRecord?'Mapa de ruta eliminado. Se seguirá usando la cartografía territorial descargada.':'Mapa eliminado. El trazado se conserva.';}}catch{$('downloadStatus').textContent='No se pudo eliminar el mapa.';}};
-function setZoom(){$('map').style.width=`${zoom*100}%`;$('plus').disabled=zoom>=4;$('minus').disabled=zoom<=1;}
-$('plus').onclick=()=>{zoom=Math.min(4,zoom+0.5);setZoom();};$('minus').onclick=()=>{zoom=Math.max(1,zoom-0.5);setZoom();};$('fit').onclick=()=>{zoom=1;setZoom();$('viewport').scrollTo(0,0);};
+function setZoom(){$('map').style.width=`${zoom*100}%`;$('plus').disabled=zoom>=5;$('minus').disabled=zoom<=1;}
+$('plus').onclick=()=>{zoom=Math.min(5,zoom+0.5);setZoom();};$('minus').onclick=()=>{zoom=Math.max(1,zoom-0.5);setZoom();};$('fit').onclick=()=>{zoom=1;setZoom();$('viewport').scrollTo({left:0,top:0,behavior:'smooth'});};
+$('centerGps').onclick=()=>{if(position)centerOnPoint(position);else ensureGPS();};
+$('fullscreen').onclick=()=>{const viewport=$('viewport'),active=viewport.classList.toggle('fullscreenMap');$('fullscreen').textContent=active?'✕':'⛶';if(position)setTimeout(()=>centerOnPoint(position),50);};
 function ensureGPS(){
   if(watch!==null)return;
   if(!navigator.geolocation){$('gpsStatus').textContent='Este navegador no ofrece GPS.';return;}
@@ -124,15 +170,16 @@ function ensureGPS(){
   watch=navigator.geolocation.watchPosition(({coords,timestamp})=>{
     lastFix=timestamp;position={lat:coords.latitude,lon:coords.longitude,accuracy:Number(coords.accuracy||999),heading:Number(coords.heading),speed:Number(coords.speed),at:timestamp};
     if((navMode==='route'||navMode==='lost')&&position.accuracy<=80)saveBreadcrumb(position);
-    if(bounds){const p=pixel(position,bounds),fresh=Date.now()-timestamp<45000,inside=p.x>=0&&p.x<=SIZE&&p.y>=0&&p.y<=SIZE;$('position').toggleAttribute('hidden',!inside||!fresh);$('position').setAttribute('cx',p.x);$('position').setAttribute('cy',p.y);$('gpsStatus').textContent=!fresh?'La posición GPS está desactualizada.':!inside?'Tu posición está fuera de esta vista; la guía sigue calculando rumbo y distancia.':'GPS activo · precisión aproximada ±'+Math.round(position.accuracy)+' m'+(position.accuracy>50?' · señal imprecisa':'')}
+    if(bounds)updatePositionMarker();
     updateNavigation(position);
+    if(navMode!=='idle')void ensureNavigationFrame(false);
   },error=>{$('position').setAttribute('hidden','');const message=gpsErrorMessage(error);$('gpsStatus').textContent=message;$('navMessage').textContent=message;},{enableHighAccuracy:true,maximumAge:1000,timeout:30000});
 }
 $('gps').onclick=()=>{if(watch!==null){stopGPS();$('gpsStatus').textContent='Posición desactivada.';}else ensureGPS();};
-$('toStart').onclick=()=>{ensureGPS();setNavMode('toStart','Buscando el inicio con GPS offline…');};
-$('startRoute').onclick=()=>{ensureGPS();setNavMode('route','Navegación de ruta activa.');if(position)saveBreadcrumb(position);};
-$('lost').onclick=()=>{ensureGPS();setNavMode('lost','Preparando retorno por tus propios pasos…');};
-$('stopGuide').onclick=()=>setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');
+$('toStart').onclick=()=>{ensureGPS();setNavMode('toStart','Buscando el inicio con GPS offline…');setTimeout(()=>void ensureNavigationFrame(true),100);};
+$('startRoute').onclick=()=>{ensureGPS();navigationRecord=null;lastViewPoint=null;setNavMode('route','Navegación de ruta activa.');if(position){saveBreadcrumb(position);setTimeout(()=>void ensureNavigationFrame(true),100);}};
+$('lost').onclick=()=>{ensureGPS();setNavMode('lost','Preparando retorno al sendero…');setTimeout(()=>void ensureNavigationFrame(true),100);};
+$('stopGuide').onclick=()=>{navigationRecord=null;lastViewPoint=null;setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');render();};
 const freshness=setInterval(()=>{if(watch!==null && lastFix && Date.now()-lastFix>30000){$('position').setAttribute('hidden','');$('gpsStatus').textContent='La posición GPS está desactualizada. Esperando una nueva señal…';}},5000);
 window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();if(imageURL)URL.revokeObjectURL(imageURL);});
 (async()=>{
