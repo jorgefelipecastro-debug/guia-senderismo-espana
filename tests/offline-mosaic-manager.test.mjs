@@ -42,3 +42,18 @@ test('el proxy mantiene raster legado y añade teselas IGN cacheables',async()=>
     assert.equal(invalid.status,400);
   } finally { globalThis.fetch=original; }
 });
+
+
+test('un 429 temporal se reintenta y no cancela toda la zona',async()=>{
+  const bounds=[-0.55,38.32,-0.54,38.33];
+  let calls=0;
+  const fetcher=async()=>{
+    calls++;
+    if(calls===1)return new Response('limit',{status:429,headers:{'content-type':'text/plain','retry-after':'0'}});
+    return new Response(new Blob(['jpeg'],{type:'image/jpeg'}),{status:200,headers:{'content-type':'image/jpeg'}});
+  };
+  const pack=await downloadOfflinePack({id:'test-429',name:'429',kind:'province',bounds,minZoom:8,maxZoom:8},{fetcher,requestIntervalMs:0});
+  assert.equal(pack.status,'ready');
+  assert.ok(calls>=2);
+  await removeOfflinePack('test-429');
+});
