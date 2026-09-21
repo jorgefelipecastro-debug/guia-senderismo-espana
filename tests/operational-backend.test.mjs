@@ -30,15 +30,15 @@ test('las APIs operativas permiten CORS limitado y no wildcard',async()=>{
   assert.doesNotMatch(cors,/Access-Control-Allow-Origin[^\n]*\*/);
 });
 
-test('el modo offline cachea el cliente Railway v25',async()=>{
+test('el modo offline cachea el cliente Railway v26',async()=>{
   const worker=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-  assert.match(worker,/encumbrate-public-v25/);
+  assert.match(worker,/encumbrate-public-v26/);
   assert.match(worker,/\/offline\/api\.mjs/);
 });
 
-test('el routing peatonal aun conserva endpoint same-origin hasta migrar Mapbox',async()=>{
+test('el routing peatonal usa Railway como primario con fallback Vercel',async()=>{
   const prep=await readFile(new URL('../app/RoutePreparation.js',import.meta.url),'utf8');
   const viewer=await readFile(new URL('../public/offline/viewer.mjs',import.meta.url),'utf8');
-  assert.match(prep,/fetch\('\/api\/navigation\/return'/);
-  assert.match(viewer,/fetch\('\/api\/navigation\/return'/);
+  assert.match(prep,/operationalFetch\('\/api\/navigation\/return'/);
+  assert.match(viewer,/operationalFetch\('\/api\/navigation\/return'/);
 });
