@@ -11,6 +11,7 @@ import RouteMapExplorer from "./RouteMapExplorer";
 import RoutePreparation from "./RoutePreparation";
 import Weather from "./Weather";
 import { readSettings } from "../lib/app-settings";
+import { operationalFetch } from "../lib/operational-api";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -120,7 +121,7 @@ function readOfflineRoute(routeId) {
   }
 }
 async function downloadOfflineRoute(route) {
-  const response = await fetch(
+  const response = await operationalFetch(
       `/api/routes/track?id=${encodeURIComponent(route.id)}`,
       { cache: "no-store" },
     ),
