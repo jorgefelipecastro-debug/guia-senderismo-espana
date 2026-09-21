@@ -19,3 +19,21 @@ test('Preparar mi salida permite guardar un acceso peatonal desde el GPS actual'
   assert.match(source,/encumbrate:offline-access:/);
   assert.match(source,/Mapbox Walking/);
 });
+
+
+test('Ir al inicio recalcula automaticamente al apartarse del acceso con conexion',async()=>{
+  const viewer=await readFile(new URL('../public/offline/viewer.mjs',import.meta.url),'utf8');
+  assert.match(viewer,/maybeRecalculateAccess/);
+  assert.match(viewer,/calculateAccessNow\(\{force:false\}\)/);
+  assert.match(viewer,/navMode!=='toStart'/);
+  assert.match(viewer,/navigator\.onLine/);
+  assert.match(viewer,/lastAccessRecalcAt/);
+  assert.match(viewer,/moved<50/);
+  assert.match(viewer,/Recalculando acceso peatonal desde tu posición actual/);
+});
+
+test('sin conexion nunca sustituye el acceso por una linea recta',async()=>{
+  const viewer=await readFile(new URL('../public/offline/viewer.mjs',import.meta.url),'utf8');
+  assert.match(viewer,/Sin conexión no se dibujará ningún atajo/);
+  assert.doesNotMatch(viewer,/bluePoints=\[position,track\.points\[0\]\]/);
+});
