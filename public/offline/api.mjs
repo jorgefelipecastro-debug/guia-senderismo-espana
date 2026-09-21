@@ -14,7 +14,7 @@ export async function operationalFetch(path,options={},fetcher=fetch){
   const normalized=String(path||'').startsWith('/')?String(path):'/'+String(path||'');
   try{
     const response=await fetcher(operationalApiUrl(normalized),{...options,credentials:'omit'});
-    if(![502,504].includes(response.status))return response;
+    if(![502,503,504].includes(response.status))return response;
   }catch{}
   return fetcher(normalized,{...options,credentials:options.credentials||'same-origin'});
 }
