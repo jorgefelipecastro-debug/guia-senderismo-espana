@@ -288,7 +288,7 @@ async function calculateAccessNow({force=false}={}){
   accessRecalculating=true;lastAccessRecalcAt=now;lastAccessRecalcPoint={lat:position.lat,lon:position.lon};
   if(navMode==='toStart')$('navMessage').textContent='Recalculando acceso peatonal desde tu posición actual…';
   try{
-    const response=await fetch('/api/navigation/return',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:position,to:track.points[0]})});
+    const response=await operationalFetch('/api/navigation/return',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:position,to:track.points[0]})});
     const body=await response.json();
     if(!response.ok||!Array.isArray(body.points)||body.points.length<2)throw new Error(body.error||'No se ha encontrado un acceso peatonal fiable.');
     accessRoute={routeId:track.id,from:{lat:position.lat,lon:position.lon,accuracy:position.accuracy,at:position.at},to:track.points[0],points:body.points,distanceM:Number(body.distanceM||0),provider:body.provider||'Mapbox Walking',warning:body.warning||'',savedAt:new Date().toISOString()};
