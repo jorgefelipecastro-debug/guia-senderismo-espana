@@ -5,6 +5,8 @@ const TILE_SIZE = 256;
 const R = 6378137;
 const WORLD = 2 * Math.PI * R;
 const SPAIN = [-18.5,27.3,4.7,44.1];
+const IGN_ATTEMPTS = 4;
+const IGN_TIMEOUT_MS = 15000;
 
 function unproject(x, y) {
   return { lon: (x / R) * 180 / Math.PI, lat: (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI };
@@ -32,21 +34,61 @@ function ignUrl(bounds,size) {
   const params=new URLSearchParams({SERVICE:'WMS',VERSION:'1.3.0',REQUEST:'GetMap',LAYERS:'mtn_rasterizado',STYLES:'',CRS:'EPSG:3857',BBOX:bounds.join(','),WIDTH:String(size),HEIGHT:String(size),FORMAT:'image/jpeg'});
   return `https://www.ign.es/wms-inspire/mapa-raster?${params}`;
 }
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,Math.max(0,ms)));
+function retryDelay(response,attempt){
+  const raw=response?.headers?.get?.('retry-after');
+  if(raw!==null&&raw!==undefined&&raw!==''){
+    const seconds=Number(raw);
+    if(Number.isFinite(seconds)&&seconds>=0)return Math.min(5000,seconds*1000);
+  }
+  return Math.min(3000,300*(2**attempt));
+}
+async function fetchIgnImage(bounds,size,maxBytes,label){
+  let last={status:0,type:'',announced:0,reason:'unknown'};
+  for(let attempt=0;attempt<IGN_ATTEMPTS;attempt++){
+    let response=null;
+    try{
+      response=await fetch(ignUrl(bounds,size),{cache:'no-store',signal:AbortSignal.timeout(IGN_TIMEOUT_MS)});
+      const type=response.headers.get('content-type')||'';
+      const announced=Number(response.headers.get('content-length')||0);
+      if(response.ok&&type.startsWith('image/')&&announced<=maxBytes){
+        const bytes=await response.arrayBuffer();
+        if(bytes.byteLength&&bytes.byteLength<=maxBytes)return{bytes,type,attempts:attempt+1};
+        last={status:response.status,type,announced,reason:'invalid-image-size'};
+      }else{
+        last={status:response.status,type,announced,reason:!response.ok?'upstream-status':!type.startsWith('image/')?'non-image':'image-too-large'};
+      }
+    }catch(error){
+      last={status:0,type:'',announced:0,reason:error?.name==='TimeoutError'?'timeout':'network-error'};
+    }
+    if(attempt<IGN_ATTEMPTS-1){
+      const delay=retryDelay(response,attempt);
+      console.warn('Offline map upstream retry',{label,attempt:attempt+1,...last,delay});
+      await sleep(delay);
+    }
+  }
+  const error=Error('invalid IGN response');
+  error.details={label,...last,attempts:IGN_ATTEMPTS};
+  throw error;
+}
 export async function GET(request) {
   const params=new URL(request.url).searchParams;
-  let bounds,size=SIZE,maxBytes=MAX_BYTES,isTile=false;
+  let bounds,size=SIZE,maxBytes=MAX_BYTES,isTile=false,label='legacy-raster';
   try {
-    if(params.has('z')){size=Number(params.get('size')||TILE_SIZE);bounds=tileBounds(params.get('z'),params.get('x'),params.get('y'),size);maxBytes=TILE_MAX_BYTES;isTile=true;}
-    else bounds=parseBounds(params.get('bbox'));
+    if(params.has('z')){
+      size=Number(params.get('size')||TILE_SIZE);
+      const z=params.get('z'),x=params.get('x'),y=params.get('y');
+      bounds=tileBounds(z,x,y,size);
+      maxBytes=TILE_MAX_BYTES;
+      isTile=true;
+      label=`z${z}/x${x}/y${y}`;
+    } else bounds=parseBounds(params.get('bbox'));
   } catch { return Response.json({error:'Zona de mapa no valida.'},{status:400}); }
   try {
-    const response=await fetch(ignUrl(bounds,size),{cache:'no-store',signal:AbortSignal.timeout(20000)}),type=response.headers.get('content-type')||'',announced=Number(response.headers.get('content-length')||0);
-    if(!response.ok||!type.startsWith('image/')||announced>maxBytes)throw Error('invalid IGN response');
-    const bytes=await response.arrayBuffer();
-    if(!bytes.byteLength||bytes.byteLength>maxBytes)throw Error('invalid image size');
-    return new Response(bytes,{status:200,headers:{'Content-Type':type,'Content-Length':String(bytes.byteLength),'Cache-Control':isTile?'public, max-age=2592000, stale-while-revalidate=7776000':'public, max-age=86400, stale-while-revalidate=604800','X-Content-Type-Options':'nosniff',...(isTile?{'X-Encumbrate-Offline-Tile':'1'}:{})}});
+    const {bytes,type,attempts}=await fetchIgnImage(bounds,size,maxBytes,label);
+    return new Response(bytes,{status:200,headers:{'Content-Type':type,'Content-Length':String(bytes.byteLength),'Cache-Control':isTile?'public, max-age=2592000, stale-while-revalidate=7776000':'public, max-age=86400, stale-while-revalidate=604800','X-Content-Type-Options':'nosniff','X-Encumbrate-IGN-Attempts':String(attempts),...(isTile?{'X-Encumbrate-Offline-Tile':'1'}:{})}});
   } catch(error) {
-    console.error('Offline map proxy failed',error);
-    return Response.json({error:'No se ha podido preparar la cartografia offline.'},{status:502,headers:{'Cache-Control':'no-store'}});
+    console.error('Offline map proxy failed',error?.details||{label,message:error?.message});
+    return Response.json({error:'El servidor cartografico esta respondiendo de forma temporalmente irregular. Encumbrate reintentara la descarga.'},{status:503,headers:{'Cache-Control':'no-store','Retry-After':'2'}});
   }
 }
