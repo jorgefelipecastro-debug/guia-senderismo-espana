@@ -1,6 +1,6 @@
 import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
 import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
-import {bearingDegrees,breadcrumbReturn,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,shouldSaveBreadcrumb} from './nav.mjs';
+import {bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
 const $=id=>document.getElementById(id), tracks=[];
 let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false;
@@ -18,16 +18,26 @@ function connection(){ $('connection').textContent=navigator.onLine?'Con conexi�
 window.addEventListener('online',connection);window.addEventListener('offline',connection);connection();
 function breadcrumbKey(){return track?'encumbrate:offline-breadcrumbs:'+track.id:'';}
 function loadBreadcrumbs(){try{const value=JSON.parse(localStorage.getItem(breadcrumbKey())||'[]');return Array.isArray(value)?value.filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon)).slice(-1500):[]}catch{return[]}}
-function saveBreadcrumb(point){if(!track||!point)return;const previous=breadcrumbs.at(-1);if(!shouldSaveBreadcrumb(previous,point,8))return;breadcrumbs=[...breadcrumbs,{lat:point.lat,lon:point.lon,at:Date.now()}].slice(-1500);try{localStorage.setItem(breadcrumbKey(),JSON.stringify(breadcrumbs))}catch{}}
+function saveBreadcrumb(point){if(!track||!point)return;const previous=breadcrumbs.at(-1);if(!shouldSaveBreadcrumb(previous,point,8))return;breadcrumbs=[...breadcrumbs,{lat:point.lat,lon:point.lon,accuracy:Number(point.accuracy||0),at:Date.now()}].slice(-1500);try{localStorage.setItem(breadcrumbKey(),JSON.stringify(breadcrumbs))}catch{}}
 function linePath(points){if(!bounds||!Array.isArray(points)||points.length<2)return'';return points.map((p,i)=>{const q=pixel(p,bounds);return (i?'L':'M')+q.x.toFixed(2)+' '+q.y.toFixed(2)}).join(' ')}
+function metricsFor(point,accuracy=point?.accuracy){
+  const segments=(Array.isArray(track?.segments)?track.segments:[]).filter(segment=>Array.isArray(segment)&&segment.length>1);
+  return segments.length?routeMetricsSegments(point,segments,accuracy):routeMetrics(point,track?.points||[],accuracy);
+}
 function setNavMode(mode,message=''){navMode=mode;const labels={idle:'Lista para empezar.',toStart:'Orientación al inicio',route:'Navegación activa',lost:'Volver al sendero'};$('navMode').textContent=labels[mode]||labels.idle;$('stopGuide').hidden=mode==='idle';$('toStart').disabled=mode==='toStart';$('startRoute').disabled=mode==='route';$('lost').disabled=mode==='lost';if(message)$('navMessage').textContent=message;updateNavigation(position)}
 function returnGuidePoints(){
-  if(!position||!track)return[];
-  const back=breadcrumbReturn(position,breadcrumbs,track.points,35);
-  const nearest=routeMetrics(position,track.points,position.accuracy);
-  const reachesTrail=back.length>1&&back.some(point=>routeMetrics(point,track.points,30)?.distance<=35);
-  if(reachesTrail)return back;
-  return nearest?.point?[position,nearest.point]:[];
+  if(!position||!track||breadcrumbs.length<3)return[];
+  const reversed=[position,...breadcrumbs.slice().reverse()],result=[];
+  for(const point of reversed){
+    if(result.length){
+      const step=distanceMetres(result.at(-1),point);
+      if(!Number.isFinite(step)||step>120)return[];
+    }
+    result.push({lat:point.lat,lon:point.lon,accuracy:Number(point.accuracy||0)});
+    const metric=metricsFor(point,Math.max(10,Number(point.accuracy||30)));
+    if(result.length>=3&&metric&&metric.distance<=35)return result;
+  }
+  return[];
 }
 function drawNavigation(){
   $('guideLine').setAttribute('d','');$('returnLine').setAttribute('d','');
@@ -45,7 +55,7 @@ function updateNavigation(current){
   if(!track)return;
   const start=track.points[0];
   if(!current){$('navDistance').textContent='—';$('navBearing').textContent='—';$('navTrailDistance').textContent='—';$('navProgress').textContent='—';$('navProgressBar').style.width='0%';drawNavigation();return}
-  const metrics=routeMetrics(current,track.points,current.accuracy),toStart=distanceMetres(current,start),bearing=bearingDegrees(current,start);
+  const metrics=metricsFor(current,current.accuracy),toStart=distanceMetres(current,start),bearing=bearingDegrees(current,start);
   const onRoute=metrics&&['on-track','near'].includes(metrics.status);
   $('navTrailDistance').textContent=metrics?formatDistance(metrics.distance):'—';
   $('navProgress').textContent=onRoute?Math.round(metrics.progress*100)+'%':'—';
@@ -60,8 +70,8 @@ function updateNavigation(current){
   }else if(navMode==='lost'){
     const path=returnGuidePoints(),usingBreadcrumbs=path.length>2;
     $('navDistance').textContent=metrics?formatDistance(metrics.distance):'—';
-    $('navBearing').textContent=usingBreadcrumbs?(path.length-1)+' puntos GPS':'Directo';
-    $('navMessage').textContent=onRoute?'Has recuperado el sendero. Pulsa «Iniciar ruta».':usingBreadcrumbs?'Sigue la línea roja por tus propios pasos hasta volver al trazado verde.':'La línea roja señala directamente el punto más cercano del sendero. No representa un camino transitable.';
+    $('navBearing').textContent=usingBreadcrumbs?(path.length-1)+' puntos GPS':'—';
+    $('navMessage').textContent=onRoute?'Has recuperado el sendero. Pulsa «Iniciar ruta».':usingBreadcrumbs?'Sigue la línea roja únicamente por tus propios pasos registrados hasta volver al trazado verde.':'No hay un retorno offline seguro calculado. Encúmbrate no dibuja una línea recta porque podría atravesar terreno peligroso. Vuelve por un camino conocido o recupera conexión.';
   }else{
     $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent=compass(bearing)+' · '+Math.round(bearing)+'°';
     $('navMessage').textContent='GPS listo. Elige «Ir al inicio» o «Iniciar ruta».';
@@ -89,7 +99,7 @@ function updatePositionMarker(){
 }
 async function ensureNavigationFrame(force=false){
   if(!position||!track||viewBusy)return;
-  const metrics=routeMetrics(position,track.points,position.accuracy);
+  const metrics=metricsFor(position,position.accuracy);
   if(!metrics)return;
   if(!force&&bounds&&boundsContainPoint(bounds,position,.12)&&lastViewPoint&&distanceMetres(lastViewPoint,position)<250)return;
   let points=[];
@@ -141,8 +151,21 @@ function render(resetZoom=true){
   }
   $('attribution').hidden=!source;$('remove').hidden=!record;if(resetZoom){zoom=1;setZoom();}drawNavigation();updatePositionMarker();
 }
+async function refreshTrackIfOnline(current){
+  if(!navigator.onLine||!current?.id)return current;
+  try{
+    const response=await fetch('/api/routes/track?id='+encodeURIComponent(current.id),{cache:'no-store',credentials:'same-origin'});
+    const body=await response.json();
+    if(!response.ok||!Array.isArray(body.points)||body.points.length<2)return current;
+    const next={...current,points:body.points,segments:Array.isArray(body.segments)?body.segments:undefined,source:body.source,official:Boolean(body.official),geometryVersion:body.geometryVersion||'legacy',distanceKm:body.distanceKm,savedAt:new Date().toISOString()};
+    localStorage.setItem('encumbrate:offline-route:'+current.id,JSON.stringify(next));
+    const index=tracks.findIndex(item=>item.id===current.id);if(index>=0)tracks[index]=next;
+    return next;
+  }catch{return current}
+}
 async function select(){
   const version=++selection;controller?.abort();stopGPS();position=null;firstGpsFrame=false;setNavMode('idle','Activa el GPS o inicia una guía offline.');track=tracks.find(t=>t.id===$('routes').value);if(!track)return;
+  track=await refreshTrackIfOnline(track);if(version!==selection)return;
   liveMap?.destroy?.();liveMap=null;
   try{
     liveMap=await createOfflineGpsMap({
@@ -211,7 +234,7 @@ function ensureGPS(){
     if((navMode==='route'||navMode==='lost')&&position.accuracy<=80)saveBreadcrumb(position);
     liveMap?.setPosition(position,{followUser:liveMap?.isFollowing?.()});
     if(!firstGpsFrame&&liveMap){
-      const metrics=routeMetrics(position,track.points,position.accuracy);
+      const metrics=metricsFor(position,position.accuracy);
       if(metrics?.distance>500)liveMap.fitPoints([position,metrics.point],64);
       else liveMap.recenter({zoom:14});
       firstGpsFrame=true;
@@ -239,10 +262,16 @@ $('startRoute').onclick=()=>{
   }
 };
 $('lost').onclick=()=>{
-  ensureGPS();setNavMode('lost','Preparando retorno al sendero…');
+  ensureGPS();setNavMode('lost','Comprobando si existe un retorno offline seguro…');
   if(position&&liveMap){
     const red=returnGuidePoints();
-    if(red.length>1)liveMap.fitPoints(red,70);
+    if(red.length>2){
+      liveMap.fitPoints(red,70);
+      liveMap.setGuide({redPoints:red});
+    }else{
+      liveMap.setGuide({redPoints:[]});
+      $('navMessage').textContent='No hay suficientes migas GPS fiables para guiarte de vuelta. No avances siguiendo una línea recta: usa un camino conocido o recupera conexión.';
+    }
   }else setTimeout(()=>void ensureNavigationFrame(true),100);
 };
 $('stopGuide').onclick=()=>{navigationRecord=null;lastViewPoint=null;setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');liveMap?.setGuide({});liveMap?.fitTrack();render();};
@@ -250,8 +279,8 @@ const freshness=setInterval(()=>{if(watch!==null && lastFix && Date.now()-lastFi
 window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();liveMap?.destroy?.();document.body.style.overflow='';if(imageURL)URL.revokeObjectURL(imageURL);});
 (async()=>{
   try{
-    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=20',{updateViaCache:'none'});
-    const cache=await caches.open('encumbrate-public-v20');
+    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=21',{updateViaCache:'none'});
+    const cache=await caches.open('encumbrate-public-v21');
     const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/nav.mjs','/offline/tile-map.mjs'].map(path=>cache.match(path)));
     $('bootStatus').textContent=resources.every(Boolean)?'Navegación offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
   }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}

@@ -131,7 +131,10 @@ async function downloadOfflineRoute(route) {
     id: route.id,
     name: route.name,
     points: body.points,
+    segments: Array.isArray(body.segments) ? body.segments : undefined,
     source: body.source,
+    official: Boolean(body.official),
+    geometryVersion: body.geometryVersion || "legacy",
     distanceKm: body.distanceKm,
     savedAt: new Date().toISOString(),
   };

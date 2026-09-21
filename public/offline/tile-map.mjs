@@ -90,13 +90,17 @@ export async function createOfflineGpsMap({container,track,onFollowChange}){
   const missing=document.createElement('div');missing.className='gpsMapStatus';missing.textContent='';
   container.append(tileLayer,overlay,missing);
 
-  const sampleTrack=()=>{
-    const points=track?.points||[];
-    if(points.length<=2500)return points;
-    const step=Math.ceil(points.length/2500),out=[];
-    for(let i=0;i<points.length;i+=step)out.push(points[i]);
-    if(out.at(-1)!==points.at(-1))out.push(points.at(-1));
+  const sampleLine=points=>{
+    const list=Array.isArray(points)?points:[];
+    if(list.length<=2500)return list;
+    const step=Math.ceil(list.length/2500),out=[];
+    for(let i=0;i<list.length;i+=step)out.push(list[i]);
+    if(out.at(-1)!==list.at(-1))out.push(list.at(-1));
     return out;
+  };
+  const displaySegments=()=>{
+    const segments=(Array.isArray(track?.segments)?track.segments:[]).filter(segment=>Array.isArray(segment)&&segment.length>1);
+    return segments.length?segments.map(sampleLine):[sampleLine(track?.points||[])];
   };
 
   function dimensions(){return{width:Math.max(1,container.clientWidth),height:Math.max(1,container.clientHeight)};}
@@ -114,7 +118,7 @@ export async function createOfflineGpsMap({container,track,onFollowChange}){
   function renderOverlay(){
     const {width,height}=dimensions();
     overlay.setAttribute('viewBox',`0 0 ${width} ${height}`);
-    routePath.setAttribute('d',pathFor(sampleTrack()));
+    routePath.setAttribute('d',displaySegments().map(segment=>pathFor(segment)).filter(Boolean).join(' '));
     bluePath.setAttribute('d',pathFor(blue));
     redPath.setAttribute('d',pathFor(red));
     if(track?.points?.[0]){

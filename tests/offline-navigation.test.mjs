@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bearingDegrees,breadcrumbReturn,distanceMetres,routeMetrics,shouldSaveBreadcrumb} from '../public/offline/nav.mjs';
+import {bearingDegrees,breadcrumbReturn,distanceMetres,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from '../public/offline/nav.mjs';
 
 test('calcula distancia y rumbo al inicio sin internet',()=>{
   const from={lat:38.35,lon:-0.50},to={lat:38.36,lon:-0.49};
@@ -41,4 +41,12 @@ test('no guarda migas GPS duplicadas cada pocos metros',()=>{
   const a={lat:38,lon:-1},near={lat:38.00001,lon:-1},far={lat:38.0001,lon:-1};
   assert.equal(shouldSaveBreadcrumb(a,near,8),false);
   assert.equal(shouldSaveBreadcrumb(a,far,8),true);
+});
+
+
+test('los tramos separados no crean un sendero imaginario entre ellos',()=>{
+  const segments=[[{lat:38,lon:-1},{lat:38,lon:-0.999}],[{lat:38.01,lon:-0.99},{lat:38.01,lon:-0.989}]];
+  const between={lat:38.005,lon:-0.9945};
+  const result=routeMetricsSegments(between,segments,10);
+  assert.ok(result.distance>500);
 });

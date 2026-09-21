@@ -73,3 +73,24 @@ export function formatDistance(metres){
   const value=Math.max(0,Number(metres)||0);
   return value<1000?`${Math.round(value)} m`:`${(value/1000).toLocaleString('es-ES',{maximumFractionDigits:1})} km`;
 }
+
+
+export function routeMetricsSegments(position,segments,accuracy=20){
+  const valid=(Array.isArray(segments)?segments:[]).filter(segment=>Array.isArray(segment)&&segment.length>1);
+  if(!position||!valid.length)return null;
+  const lengths=valid.map(segment=>{
+    let total=0;
+    for(let i=1;i<segment.length;i++)total+=distanceMetres(segment[i-1],segment[i]);
+    return total;
+  });
+  const total=lengths.reduce((sum,value)=>sum+value,0);
+  let before=0,best=null;
+  for(let segmentIndex=0;segmentIndex<valid.length;segmentIndex++){
+    const result=routeMetrics(position,valid[segmentIndex],accuracy);
+    if(result&&(!best||result.distance<best.distance)){
+      best={...result,segmentIndex,progress:total?Math.max(0,Math.min(1,(before+result.travelledM)/total)):0,totalM:total,travelledM:before+result.travelledM,remainingM:Math.max(0,total-(before+result.travelledM))};
+    }
+    before+=lengths[segmentIndex];
+  }
+  return best;
+}

@@ -25,5 +25,6 @@ test('el visor reencuadra la navegación y oculta progreso cuando está fuera',a
   assert.match(viewer,/ensureNavigationFrame/);
   assert.match(viewer,/squareBoundsForPoints/);
   assert.match(viewer,/navProgress'\)\.textContent=onRoute/);
-  assert.match(viewer,/La línea roja señala directamente/);
+  assert.match(viewer,/No hay un retorno offline seguro calculado/);
+  assert.doesNotMatch(viewer,/La línea roja señala directamente el punto más cercano/);
 });
