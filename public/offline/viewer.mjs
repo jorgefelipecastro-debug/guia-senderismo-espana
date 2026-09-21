@@ -135,7 +135,7 @@ async function ensureNavigationFrame(force=false){
   if(!force&&bounds&&boundsContainPoint(bounds,position,.12)&&lastViewPoint&&distanceMetres(lastViewPoint,position)<250)return;
   let points=[];
   if(navMode==='idle')points=[position,metrics.point];
-  else if(navMode==='toStart')points=[position,track.points[0]];
+  else if(navMode==='toStart'){const access=accessState(position);points=access?.valid?access.remaining:[position];}
   else if(navMode==='lost'){
     const back=returnGuidePoints();
     points=back.length>1?back:[position,metrics.point];
