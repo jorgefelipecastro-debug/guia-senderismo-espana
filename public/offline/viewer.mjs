@@ -1,6 +1,6 @@
 import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
 import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
-import {bearingDegrees,breadcrumbReturn,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,shouldSaveBreadcrumb} from './nav.mjs';
+import {bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
 const $=id=>document.getElementById(id), tracks=[];
 let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false;
@@ -20,18 +20,24 @@ function breadcrumbKey(){return track?'encumbrate:offline-breadcrumbs:'+track.id
 function loadBreadcrumbs(){try{const value=JSON.parse(localStorage.getItem(breadcrumbKey())||'[]');return Array.isArray(value)?value.filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon)).slice(-1500):[]}catch{return[]}}
 function saveBreadcrumb(point){if(!track||!point)return;const previous=breadcrumbs.at(-1);if(!shouldSaveBreadcrumb(previous,point,8))return;breadcrumbs=[...breadcrumbs,{lat:point.lat,lon:point.lon,accuracy:Number(point.accuracy||0),at:Date.now()}].slice(-1500);try{localStorage.setItem(breadcrumbKey(),JSON.stringify(breadcrumbs))}catch{}}
 function linePath(points){if(!bounds||!Array.isArray(points)||points.length<2)return'';return points.map((p,i)=>{const q=pixel(p,bounds);return (i?'L':'M')+q.x.toFixed(2)+' '+q.y.toFixed(2)}).join(' ')}
+function metricsFor(point,accuracy=point?.accuracy){
+  const segments=(Array.isArray(track?.segments)?track.segments:[]).filter(segment=>Array.isArray(segment)&&segment.length>1);
+  return segments.length?routeMetricsSegments(point,segments,accuracy):routeMetrics(point,track?.points||[],accuracy);
+}
 function setNavMode(mode,message=''){navMode=mode;const labels={idle:'Lista para empezar.',toStart:'Orientación al inicio',route:'Navegación activa',lost:'Volver al sendero'};$('navMode').textContent=labels[mode]||labels.idle;$('stopGuide').hidden=mode==='idle';$('toStart').disabled=mode==='toStart';$('startRoute').disabled=mode==='route';$('lost').disabled=mode==='lost';if(message)$('navMessage').textContent=message;updateNavigation(position)}
 function returnGuidePoints(){
   if(!position||!track||breadcrumbs.length<3)return[];
-  const back=breadcrumbReturn(position,breadcrumbs,track.points,35);
-  if(back.length<3)return[];
-  const end=back.at(-1),endMetrics=routeMetrics(end,track.points,Math.max(10,Number(end?.accuracy||30)));
-  if(!endMetrics||endMetrics.distance>35)return[];
-  for(let i=1;i<back.length;i++){
-    const step=distanceMetres(back[i-1],back[i]);
-    if(!Number.isFinite(step)||step>120)return[];
+  const reversed=[position,...breadcrumbs.slice().reverse()],result=[];
+  for(const point of reversed){
+    if(result.length){
+      const step=distanceMetres(result.at(-1),point);
+      if(!Number.isFinite(step)||step>120)return[];
+    }
+    result.push({lat:point.lat,lon:point.lon,accuracy:Number(point.accuracy||0)});
+    const metric=metricsFor(point,Math.max(10,Number(point.accuracy||30)));
+    if(result.length>=3&&metric&&metric.distance<=35)return result;
   }
-  return back;
+  return[];
 }
 function drawNavigation(){
   $('guideLine').setAttribute('d','');$('returnLine').setAttribute('d','');
@@ -49,7 +55,7 @@ function updateNavigation(current){
   if(!track)return;
   const start=track.points[0];
   if(!current){$('navDistance').textContent='—';$('navBearing').textContent='—';$('navTrailDistance').textContent='—';$('navProgress').textContent='—';$('navProgressBar').style.width='0%';drawNavigation();return}
-  const metrics=routeMetrics(current,track.points,current.accuracy),toStart=distanceMetres(current,start),bearing=bearingDegrees(current,start);
+  const metrics=metricsFor(current,current.accuracy),toStart=distanceMetres(current,start),bearing=bearingDegrees(current,start);
   const onRoute=metrics&&['on-track','near'].includes(metrics.status);
   $('navTrailDistance').textContent=metrics?formatDistance(metrics.distance):'—';
   $('navProgress').textContent=onRoute?Math.round(metrics.progress*100)+'%':'—';
@@ -93,7 +99,7 @@ function updatePositionMarker(){
 }
 async function ensureNavigationFrame(force=false){
   if(!position||!track||viewBusy)return;
-  const metrics=routeMetrics(position,track.points,position.accuracy);
+  const metrics=metricsFor(position,position.accuracy);
   if(!metrics)return;
   if(!force&&bounds&&boundsContainPoint(bounds,position,.12)&&lastViewPoint&&distanceMetres(lastViewPoint,position)<250)return;
   let points=[];
@@ -215,7 +221,7 @@ function ensureGPS(){
     if((navMode==='route'||navMode==='lost')&&position.accuracy<=80)saveBreadcrumb(position);
     liveMap?.setPosition(position,{followUser:liveMap?.isFollowing?.()});
     if(!firstGpsFrame&&liveMap){
-      const metrics=routeMetrics(position,track.points,position.accuracy);
+      const metrics=metricsFor(position,position.accuracy);
       if(metrics?.distance>500)liveMap.fitPoints([position,metrics.point],64);
       else liveMap.recenter({zoom:14});
       firstGpsFrame=true;
