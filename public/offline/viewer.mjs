@@ -1,6 +1,6 @@
 import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
 import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
-import {bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,nearestPolylinePoint,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
+import {accessPathState,bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
 const $=id=>document.getElementById(id), tracks=[];
 let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null;
@@ -26,15 +26,7 @@ function loadAccessRoute(){
   }catch{return null}
 }
 function accessState(current){
-  if(!current||!accessRoute?.points?.length)return null;
-  const nearest=nearestPolylinePoint(current,accessRoute.points);
-  if(!nearest)return null;
-  const maxSnap=Math.max(35,Math.min(100,Number(current.accuracy||0)*1.5||60));
-  const valid=nearest.distance<=maxSnap;
-  const remaining=[nearest.point,...accessRoute.points.slice(nearest.index+1)];
-  let remainingM=0;
-  for(let i=1;i<remaining.length;i++)remainingM+=distanceMetres(remaining[i-1],remaining[i]);
-  return{nearest,valid,maxSnap,remaining,remainingM};
+  return accessPathState(current,accessRoute?.points,current?.accuracy);
 }
 
 function loadBreadcrumbs(){try{const value=JSON.parse(localStorage.getItem(breadcrumbKey())||'[]');return Array.isArray(value)?value.filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon)).slice(-1500):[]}catch{return[]}}
