@@ -7,7 +7,7 @@ test('Ir al inicio usa un acceso peatonal guardado y no una recta GPS-inicio',as
   assert.match(viewer,/encumbrate:offline-access:/);
   assert.match(viewer,/accessPathState/);
   assert.match(viewer,/Sigue la línea azul del acceso peatonal guardado/);
-  assert.match(viewer,/Encúmbrate no dibuja un atajo/);
+  assert.match(viewer,/Sin conexión no se dibujará ningún atajo/);
   assert.doesNotMatch(viewer,/bluePoints=\[position,track\.points\[0\]\]/);
   assert.doesNotMatch(viewer,/points=\[position,track\.points\[0\]\]/);
 });
