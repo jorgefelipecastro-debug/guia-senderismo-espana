@@ -1,6 +1,7 @@
 import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,SIZE} from './maps.mjs';
+import {renderMosaicForBounds} from './mosaic.mjs';
 const $=id=>document.getElementById(id), tracks=[];
-let track,record,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0;
+let track,record,mosaicRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0;
 try {
   for(let i=0;i<localStorage.length;i++) {
     const key=localStorage.key(i);
@@ -16,7 +17,8 @@ window.addEventListener('online',connection);window.addEventListener('offline',c
 function stopGPS(){if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;$('position').setAttribute('hidden','');$('gps').textContent='Mostrar mi posición';}
 function render(){
   if(imageURL)URL.revokeObjectURL(imageURL);imageURL=null;
-  if(record){bounds=record.bounds;imageURL=URL.createObjectURL(record.blob);$('background').setAttribute('href',imageURL);}
+  const source=record||mosaicRecord;
+  if(source){bounds=source.bounds;imageURL=URL.createObjectURL(source.blob);$('background').setAttribute('href',imageURL);}
   else {$('background').removeAttribute('href');try {bounds=mapBounds(track);}catch {
     const ps=track.points.map(p=>({lat:p.lat,lon:p.lon}));
     // For very long routes the schematic remains available, without a fake basemap.
@@ -24,25 +26,47 @@ function render(){
     const lo=project(min),hi=project(max);bounds=[lo.x-1000,lo.y-1000,hi.x+1000,hi.y+1000];
   }}
   $('trail').setAttribute('d',track.points.map((p,i)=>{const q=pixel(p,bounds);return `${i?'L':'M'}${q.x.toFixed(2)} ${q.y.toFixed(2)}`;}).join(' '));
-  $('mapStatus').textContent=record?`Mapa y trazado guardados · ${(record.blob.size/1048576).toFixed(1)} MB · ${new Date(record.savedAt).toLocaleDateString('es-ES')}`:'Solo trazado disponible. Descarga el mapa para ver el terreno sin conexión.';
-  $('attribution').hidden=!record;$('remove').hidden=!record;zoom=1;setZoom();
+  if(record){
+    $('mapStatus').textContent=`Mapa de ruta y trazado guardados · ${(record.blob.size/1048576).toFixed(1)} MB · ${new Date(record.savedAt).toLocaleDateString('es-ES')}`;
+  }else if(mosaicRecord){
+    const names=mosaicRecord.packNames?.length?mosaicRecord.packNames.join(', '):'cartografía territorial descargada';
+    const coverage=Math.round((mosaicRecord.coverage||0)*100);
+    $('mapStatus').textContent=`Mapa territorial offline disponible · ${names} · cobertura de esta vista ${coverage}%`;
+  }else{
+    $('mapStatus').textContent='Solo trazado disponible. Descarga el mapa para ver el terreno sin conexión.';
+  }
+  $('attribution').hidden=!source;$('remove').hidden=!record;zoom=1;setZoom();
 }
 async function select(){
   const version=++selection;controller?.abort();stopGPS();track=tracks.find(t=>t.id===$('routes').value);if(!track)return;
-  $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;
-  try {const saved=await readMap(track.id);if(version!==selection)return;if(saved?.key===trackKey(track))record=saved;}catch {$('downloadStatus').textContent='No se pudo abrir el almacén de mapas.';}
+  $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;mosaicRecord=null;
+  try {
+    const saved=await readMap(track.id);
+    if(version!==selection)return;
+    if(saved?.key===trackKey(track))record=saved;
+  }catch {$('downloadStatus').textContent='No se pudo abrir el almacén de mapas por ruta.';}
+  if(!record && version===selection){
+    try{
+      const targetBounds=mapBounds(track);
+      const mosaic=await renderMosaicForBounds(targetBounds);
+      if(version!==selection)return;
+      if(mosaic?.blob?.size)mosaicRecord=mosaic;
+    }catch(error){
+      console.warn('No se pudo componer el mosaico offline',error);
+    }
+  }
   if(version===selection)render();
 }
 $('routes').addEventListener('change',select);select();
 $('download').onclick=async()=>{
   if(controller || !track)return;const current=track,version=selection;controller=new AbortController();
   const active=controller,timer=setTimeout(()=>active.abort(),45000);$('cancel').hidden=false;connection();$('downloadStatus').textContent='Descargando y comprobando el mapa del IGN…';
-  try {const saved=await downloadMap(current,{signal:active.signal});if(version!==selection)return;record=saved;render();$('downloadStatus').textContent='Descarga completa y guardada. Puedes comprobarla en modo avión.';try{await navigator.storage?.persist?.();}catch{}}
+  try {const saved=await downloadMap(current,{signal:active.signal});if(version!==selection)return;record=saved;mosaicRecord=null;render();$('downloadStatus').textContent='Descarga completa y guardada. Puedes comprobarla en modo avión.';try{await navigator.storage?.persist?.();}catch{}}
   catch(error){if(version===selection)$('downloadStatus').textContent=active.signal.aborted?'Descarga interrumpida. Puedes reintentar; el mapa anterior se conserva.':error.name==='QuotaExceededError'?'No hay espacio suficiente. Elimina un mapa que ya no necesites.':error.message;}
   finally{clearTimeout(timer);controller=null;$('cancel').hidden=true;connection();}
 };
 $('cancel').onclick=()=>controller?.abort();
-$('remove').onclick=async()=>{const id=track.id,version=selection;try {await removeMap(id);if(version===selection){record=null;render();$('downloadStatus').textContent='Mapa eliminado. El trazado se conserva.';}}catch{$('downloadStatus').textContent='No se pudo eliminar el mapa.';}};
+$('remove').onclick=async()=>{const id=track.id,version=selection;try {await removeMap(id);if(version===selection){record=null;try{mosaicRecord=await renderMosaicForBounds(mapBounds(track));}catch{mosaicRecord=null;}render();$('downloadStatus').textContent=mosaicRecord?'Mapa de ruta eliminado. Se seguirá usando la cartografía territorial descargada.':'Mapa eliminado. El trazado se conserva.';}}catch{$('downloadStatus').textContent='No se pudo eliminar el mapa.';}};
 function setZoom(){$('map').style.width=`${zoom*100}%`;$('plus').disabled=zoom>=4;$('minus').disabled=zoom<=1;}
 $('plus').onclick=()=>{zoom=Math.min(4,zoom+0.5);setZoom();};$('minus').onclick=()=>{zoom=Math.max(1,zoom-0.5);setZoom();};$('fit').onclick=()=>{zoom=1;setZoom();$('viewport').scrollTo(0,0);};
 $('gps').onclick=()=>{
@@ -61,8 +85,8 @@ window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();contr
 (async()=>{
   try{
     if(navigator.onLine)await navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'});
-    const cache=await caches.open('encumbrate-public-v15');
-    const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs'].map(path=>cache.match(path)));
+    const cache=await caches.open('encumbrate-public-v16');
+    const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs'].map(path=>cache.match(path)));
     $('bootStatus').textContent=resources.every(Boolean)?'Pantalla offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
   }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}
 })();
