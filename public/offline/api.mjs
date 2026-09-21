@@ -10,11 +10,11 @@ export function operationalApiUrl(path){
   return OPERATIONAL_API_BASE.replace(/\/$/,'')+normalized;
 }
 
-export async function operationalFetch(path,options={}){
+export async function operationalFetch(path,options={},fetcher=fetch){
   const normalized=String(path||'').startsWith('/')?String(path):'/'+String(path||'');
   try{
-    const response=await fetch(operationalApiUrl(normalized),{...options,credentials:'omit'});
+    const response=await fetcher(operationalApiUrl(normalized),{...options,credentials:'omit'});
     if(![502,504].includes(response.status))return response;
   }catch{}
-  return fetch(normalized,{...options,credentials:options.credentials||'same-origin'});
+  return fetcher(normalized,{...options,credentials:options.credentials||'same-origin'});
 }
