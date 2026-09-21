@@ -55,7 +55,7 @@ function drawNavigation(){
   $('guideLine').setAttribute('d','');$('returnLine').setAttribute('d','');
   let bluePoints=[],redPoints=[];
   if(position&&track){
-    if(navMode==='toStart'){const access=accessState(position);if(access?.valid)bluePoints=access.remaining;}
+    if(navMode==='toStart'){const access=accessState(position);if(access?.valid)bluePoints=access.remaining;else if(!navigator.onLine&&accessRoute?.points?.length>1)bluePoints=accessRoute.points;}
     if(navMode==='lost')redPoints=returnGuidePoints();
   }
   liveMap?.setGuide({bluePoints,redPoints});
@@ -80,8 +80,16 @@ function updateNavigation(current){
       $('navBearing').textContent=compass(nextBearing)+' · '+Math.round(nextBearing)+'°';
       $('navMessage').textContent=access.remainingM<=40?'Has llegado al inicio. Pulsa «Iniciar ruta».':'Sigue la línea azul del acceso peatonal guardado · quedan '+formatDistance(access.remainingM)+'.';
     }else if(accessRoute){
-      $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent='—';
-      $('navMessage').textContent=navigator.onLine?'Te has apartado del acceso guardado. Encúmbrate recalculará automáticamente desde tu posición actual.':'Tu posición está demasiado lejos del acceso peatonal guardado. Sin conexión no se dibujará ningún atajo.';
+      if(navigator.onLine){
+        $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent='Recalculando';
+        $('navMessage').textContent='Te has apartado del acceso guardado. Encúmbrate recalculará automáticamente desde tu posición actual.';
+      }else{
+        $('navDistance').textContent=access?.nearest?formatDistance(access.nearest.distance):'—';
+        $('navBearing').textContent='Último acceso';
+        $('navMessage').textContent=access?.nearest
+          ?'Sin conexión. La última ruta válida permanece visible en azul. Estás a '+formatDistance(access.nearest.distance)+' de su punto más cercano. Encúmbrate no dibuja un atajo hasta ella.'
+          :'Sin conexión. La última ruta válida permanece visible en azul, pero no se ha podido calcular la distancia hasta ella.';
+      }
     }else{
       $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent=compass(bearing)+' · '+Math.round(bearing)+'°';
       $('navMessage').textContent='No hay acceso peatonal offline preparado. Conéctate y usa «Preparar acceso offline al inicio» antes de salir.';
@@ -312,9 +320,18 @@ $('toStart').onclick=async()=>{
   if(access?.valid&&liveMap){
     liveMap.fitPoints(access.remaining,64);liveMap.setFollow(false);liveMap.setGuide({bluePoints:access.remaining});
   }else if(liveMap){
-    liveMap.setGuide({bluePoints:[]});
-    if(!accessRoute)$('navMessage').textContent='No hay un acceso peatonal offline preparado. Prepáralo con conexión antes de salir.';
-    else $('navMessage').textContent='El acceso guardado no es válido desde tu posición actual. No se dibujará una línea recta.';
+    if(!navigator.onLine&&accessRoute?.points?.length>1){
+      liveMap.setGuide({bluePoints:accessRoute.points});
+      liveMap.fitPoints([position,...accessRoute.points],64);
+      const stale=accessState(position);
+      $('navMessage').textContent=stale?.nearest
+        ?'Sin conexión. Mostrando la última ruta válida en azul. Estás a '+formatDistance(stale.nearest.distance)+' de su punto más cercano.'
+        :'Sin conexión. Mostrando la última ruta válida en azul.';
+    }else{
+      liveMap.setGuide({bluePoints:[]});
+      if(!accessRoute)$('navMessage').textContent='No hay un acceso peatonal offline preparado. Prepáralo con conexión antes de salir.';
+      else $('navMessage').textContent='El acceso guardado no es válido desde tu posición actual. Encúmbrate recalculará con conexión y no dibujará una línea recta.';
+    }
   }else setTimeout(()=>void ensureNavigationFrame(true),100);
 };
 $('startRoute').onclick=()=>{
