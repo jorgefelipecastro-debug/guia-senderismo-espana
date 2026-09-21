@@ -279,8 +279,8 @@ const freshness=setInterval(()=>{if(watch!==null && lastFix && Date.now()-lastFi
 window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();liveMap?.destroy?.();document.body.style.overflow='';if(imageURL)URL.revokeObjectURL(imageURL);});
 (async()=>{
   try{
-    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=20',{updateViaCache:'none'});
-    const cache=await caches.open('encumbrate-public-v20');
+    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=21',{updateViaCache:'none'});
+    const cache=await caches.open('encumbrate-public-v21');
     const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/nav.mjs','/offline/tile-map.mjs'].map(path=>cache.match(path)));
     $('bootStatus').textContent=resources.every(Boolean)?'Navegación offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
   }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}
