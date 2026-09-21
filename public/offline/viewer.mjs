@@ -151,8 +151,21 @@ function render(resetZoom=true){
   }
   $('attribution').hidden=!source;$('remove').hidden=!record;if(resetZoom){zoom=1;setZoom();}drawNavigation();updatePositionMarker();
 }
+async function refreshTrackIfOnline(current){
+  if(!navigator.onLine||!current?.id)return current;
+  try{
+    const response=await fetch('/api/routes/track?id='+encodeURIComponent(current.id),{cache:'no-store',credentials:'same-origin'});
+    const body=await response.json();
+    if(!response.ok||!Array.isArray(body.points)||body.points.length<2)return current;
+    const next={...current,points:body.points,segments:Array.isArray(body.segments)?body.segments:undefined,source:body.source,official:Boolean(body.official),geometryVersion:body.geometryVersion||'legacy',distanceKm:body.distanceKm,savedAt:new Date().toISOString()};
+    localStorage.setItem('encumbrate:offline-route:'+current.id,JSON.stringify(next));
+    const index=tracks.findIndex(item=>item.id===current.id);if(index>=0)tracks[index]=next;
+    return next;
+  }catch{return current}
+}
 async function select(){
   const version=++selection;controller?.abort();stopGPS();position=null;firstGpsFrame=false;setNavMode('idle','Activa el GPS o inicia una guía offline.');track=tracks.find(t=>t.id===$('routes').value);if(!track)return;
+  track=await refreshTrackIfOnline(track);if(version!==selection)return;
   liveMap?.destroy?.();liveMap=null;
   try{
     liveMap=await createOfflineGpsMap({
