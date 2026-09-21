@@ -1,4 +1,4 @@
-import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors";
+import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors.js";
 const MAX_BYTES = 10 * 1024 * 1024;
 const TILE_MAX_BYTES = 1024 * 1024;
 const SIZE = 2048;
