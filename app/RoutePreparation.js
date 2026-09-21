@@ -21,7 +21,7 @@ export default function RoutePreparation({ route, download, readSaved }) {
     };
   }, [route.id, readSaved]);
   async function saveDetailedMap() {
-    const track=saved||readSaved(route.id)||await download(route);
+    const track=await download(route);
     setSaved(track);setMapBusy(true);setMapProgress(0);setError('');
     try { const pack=await downloadRouteOfflinePack({...track,name:route.name},{onProgress:p=>setMapProgress(p.percentage)}); setMapPack(pack); }
     catch { setError('No se ha podido descargar el mapa detallado. Comprueba la conexión y el espacio disponible.'); }
