@@ -2,6 +2,7 @@ import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,projec
 import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
 import {accessPathState,bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
+import {operationalFetch} from './api.mjs';
 const $=id=>document.getElementById(id), tracks=[];
 let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null,accessRecalculating=false,lastAccessRecalcAt=0,lastAccessRecalcPoint=null;
 try {
@@ -185,7 +186,7 @@ function render(resetZoom=true){
 async function refreshTrackIfOnline(current){
   if(!navigator.onLine||!current?.id)return current;
   try{
-    const response=await fetch('/api/routes/track?id='+encodeURIComponent(current.id),{cache:'no-store',credentials:'same-origin'});
+    const response=await operationalFetch('/api/routes/track?id='+encodeURIComponent(current.id),{cache:'no-store'});
     const body=await response.json();
     if(!response.ok||!Array.isArray(body.points)||body.points.length<2)return current;
     const next={...current,points:body.points,segments:Array.isArray(body.segments)?body.segments:undefined,source:body.source,official:Boolean(body.official),geometryVersion:body.geometryVersion||'legacy',distanceKm:body.distanceKm,savedAt:new Date().toISOString()};
