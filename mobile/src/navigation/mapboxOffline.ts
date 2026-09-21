@@ -1,9 +1,36 @@
 import Mapbox, { offlineManager } from "@rnmapbox/maps";
 import type { OfflineRoute } from "./routeStorage";
+import { Paths } from "expo-file-system";
+import { storageSafety } from "./downloadedMapUtils.mjs";
 import { isPackComplete, offlineBounds } from "./offlineGeometry.mjs";
 
 const publicToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || "";
+const NEW_ROUTE_DOWNLOAD_BUDGET = 200 * 1024 * 1024;
 if (publicToken) Mapbox.setAccessToken(publicToken);
+
+export function deviceStorageStatus(extraBytes = 0) {
+  return storageSafety({
+    freeBytes: Number(Paths.availableDiskSpace || 0),
+    totalBytes: Number(Paths.totalDiskSpace || 0),
+    extraBytes,
+  });
+}
+
+async function assertOfflineStorageCapacity(route: OfflineRoute, requestedName?: string) {
+  let expected = NEW_ROUTE_DOWNLOAD_BUDGET;
+  if (requestedName && route.packName && requestedName !== route.packName) {
+    const previous = await offlineManager.getPack(route.packName).catch(() => null);
+    const status = previous ? await previous.status().catch(() => null) : null;
+    const currentBytes = Number(status?.completedResourceSize || 0);
+    if (currentBytes > 0) expected = Math.max(expected, currentBytes * 1.25);
+  }
+  const storage = deviceStorageStatus(expected);
+  if (!storage.safe)
+    throw new Error(
+      `No hay espacio libre suficiente para preparar este mapa sin poner en riesgo el almacenamiento del móvil. Libera al menos ${Math.ceil((storage.reserve + storage.extra - storage.free) / (1024 * 1024))} MB e inténtalo de nuevo.`,
+    );
+  return storage;
+}
 
 export async function downloadOfflineCartography(
   route: OfflineRoute,
@@ -12,6 +39,7 @@ export async function downloadOfflineCartography(
 ) {
   if (!publicToken)
     throw new Error("Falta configurar el token público de Mapbox.");
+  await assertOfflineStorageCapacity(route, requestedName);
   const name = requestedName || route.packName || `encumbrate-${route.id}`,
     existing = await offlineManager.getPack(name);
   if (existing) {
