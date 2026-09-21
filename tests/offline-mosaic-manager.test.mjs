@@ -57,3 +57,20 @@ test('un 429 temporal se reintenta y no cancela toda la zona',async()=>{
   assert.ok(calls>=2);
   await removeOfflinePack('test-429');
 });
+
+
+test('el proxy reintenta cuando IGN devuelve una respuesta no válida',async()=>{
+  const original=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=async()=>{
+    calls++;
+    if(calls===1)return new Response('temporarily unavailable',{status:200,headers:{'content-type':'text/plain'}});
+    return new Response(new Uint8Array([0xff,0xd8,0xff,0xd9]),{status:200,headers:{'content-type':'image/jpeg'}});
+  };
+  try{
+    const tile=await offlineMapGET(new Request('https://encumbrate.test/api/maps/offline?z=8&x=127&y=97&size=256'));
+    assert.equal(tile.status,200);
+    assert.equal(tile.headers.get('x-encumbrate-ign-attempts'),'2');
+    assert.equal(calls,2);
+  } finally { globalThis.fetch=original; }
+});
