@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import {
+  deviceStorageStatus,
   offlineCartographyStatus,
   type OfflineCartographyStatus,
 } from "./mapboxOffline";
@@ -22,6 +23,7 @@ import {
   canModifyDownloadedMap,
   downloadedMapState,
   formatMapSize,
+  storageSafety,
 } from "./downloadedMapUtils.mjs";
 
 type Entry = { route: OfflineRoute; status: OfflineCartographyStatus };
@@ -53,7 +55,8 @@ export default function DownloadedMapsManager({
     [loading, setLoading] = useState(true),
     [working, setWorking] = useState<string | null>(null),
     [progress, setProgress] = useState(0),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [storage, setStorage] = useState(() => deviceStorageStatus());
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,6 +77,7 @@ export default function DownloadedMapsManager({
           }),
         );
       setEntries(items);
+      setStorage(deviceStorageStatus());
       onChanged(routes);
       setMessage("");
     } catch (error) {
@@ -96,6 +100,15 @@ export default function DownloadedMapsManager({
         0,
       ),
     [entries],
+  );
+  const storageAfterMaps = useMemo(
+    () =>
+      storageSafety({
+        freeBytes: storage.free,
+        totalBytes: storage.total,
+        extraBytes: 0,
+      }),
+    [storage],
   );
   function askDelete(entry: Entry) {
     if (!canModifyDownloadedMap(entry.route.id, activeRouteId))
@@ -166,6 +179,39 @@ export default function DownloadedMapsManager({
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.storageCard}>
+          <View style={styles.storageRow}>
+            <View>
+              <Text style={styles.storageLabel}>ESPACIO DEL DISPOSITIVO</Text>
+              <Text style={styles.storageValue}>
+                {formatMapSize(storage.free)} libres
+              </Text>
+            </View>
+            <Text style={styles.storageTotal}>
+              {formatMapSize(storage.total)} total
+            </Text>
+          </View>
+          <View style={styles.storageTrack}>
+            <View
+              style={[
+                styles.storageFill,
+                {
+                  width: `${storage.total > 0 ? Math.max(2, Math.min(100, ((storage.total - storage.free) / storage.total) * 100)) : 2}%`,
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.storageDetail}>
+            Mapas: {formatMapSize(totalSize)} · margen protegido:{" "}
+            {formatMapSize(storageAfterMaps.reserve)}
+          </Text>
+          {!storageAfterMaps.safe && (
+            <Text style={styles.storageWarning}>
+              Almacenamiento bajo: elimina mapas o libera espacio antes de
+              descargar más cartografía.
+            </Text>
+          )}
+        </View>
         <View style={styles.summary}>
           <Text style={styles.summaryNumber}>{entries.length}</Text>
           <View>
@@ -262,7 +308,8 @@ export default function DownloadedMapsManager({
         {message && <Text style={styles.message}>{message}</Text>}
         <Text style={styles.note}>
           El tamaño mostrado corresponde al paquete cartográfico de Mapbox. El
-          trazado GPS ocupa una cantidad adicional mínima.
+          trazado GPS ocupa una cantidad adicional mínima. Encúmbrate protege
+          como mínimo 1 GB o el 10 % del almacenamiento total, lo que sea mayor.
         </Text>
       </ScrollView>
     </View>
@@ -289,6 +336,51 @@ const styles = StyleSheet.create({
   },
   title: { color: "#fff", fontSize: 25, fontWeight: "900" },
   content: { padding: 16, paddingBottom: 40, gap: 13 },
+  storageCard: {
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    gap: 10,
+  },
+  storageRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+  },
+  storageLabel: {
+    color: "#5e746b",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  storageValue: {
+    color: "#083f2e",
+    fontSize: 23,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  storageTotal: { color: "#6e8079", fontSize: 11, fontWeight: "700" },
+  storageTrack: {
+    height: 9,
+    borderRadius: 6,
+    overflow: "hidden",
+    backgroundColor: "#e3ebe6",
+  },
+  storageFill: {
+    height: "100%",
+    borderRadius: 6,
+    backgroundColor: "#0a6748",
+  },
+  storageDetail: { color: "#60736a", fontSize: 10, lineHeight: 15 },
+  storageWarning: {
+    color: "#8f3b23",
+    backgroundColor: "#fdebe4",
+    padding: 9,
+    borderRadius: 10,
+    fontSize: 10,
+    fontWeight: "800",
+  },
   summary: {
     padding: 18,
     borderRadius: 20,

@@ -5,6 +5,7 @@ import {
   canModifyDownloadedMap,
   downloadedMapState,
   formatMapSize,
+  storageSafety,
 } from "../src/navigation/downloadedMapUtils.mjs";
 
 test("presenta el tamaño cartográfico en unidades legibles", () => {
@@ -46,5 +47,20 @@ test("una actualización conserva el paquete anterior hasta guardar el nuevo", a
   assert.ok(
     refresh.indexOf("saveOfflineRoute") <
       refresh.indexOf("removeOfflineCartographySafe"),
+  );
+});
+
+
+test("protege margen real antes de nuevas descargas", () => {
+  const gb = 1024 * 1024 * 1024;
+  assert.equal(storageSafety({ freeBytes: 5 * gb, totalBytes: 64 * gb }).safe, false);
+  assert.equal(storageSafety({ freeBytes: 10 * gb, totalBytes: 64 * gb }).safe, true);
+  assert.equal(
+    storageSafety({ freeBytes: 8 * gb, totalBytes: 64 * gb, extraBytes: 2 * gb }).safe,
+    false,
+  );
+  assert.equal(
+    storageSafety({ freeBytes: 12 * gb, totalBytes: 64 * gb, extraBytes: 2 * gb }).safe,
+    true,
   );
 });
