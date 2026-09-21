@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { SETTINGS_KEY, DEFAULT_SETTINGS, readSettings, applySettings } from '../lib/app-settings';
+import OfflineMapManager from './OfflineMapManager';
 
 const PREFIX = 'encumbrate:offline-route:';
 export default function SettingsHub({ close }) {
@@ -67,10 +68,13 @@ export default function SettingsHub({ close }) {
         <label className="settingsToggle"><input type="checkbox" checked={settings.largeText} onChange={e=>change({largeText:e.target.checked})}/> Texto de lectura más grande</label>
         <label className="settingsToggle"><input type="checkbox" checked={settings.reducedMotion} onChange={e=>change({reducedMotion:e.target.checked})}/> Reducir animaciones decorativas</label>
       </details>
-      <details><summary>Descargas y almacenamiento</summary>
-        <p>{unique.length} trazados · {(downloads.reduce((total,item)=>total+item.bytes,0)/1024).toLocaleString('es-ES',{maximumFractionDigits:1})} KB de datos guardados.</p>
-        <p>Este listado corresponde a los trazados de la web, no a mapas completos ni a descargas nativas de Android.</p>
-        {unique.length ? unique.map(item=><div className="settingsDownload" key={item.id}><strong>{item.name}</strong><button type="button" onClick={()=>remove(item)}>Eliminar descarga</button></div>) : <p>No hay trazados guardados en este navegador.</p>}
+      <details open><summary>Mapas offline y almacenamiento</summary>
+        <OfflineMapManager />
+        <div className="offlineTrackSection">
+          <h3>Trazados guardados</h3>
+          <p>{unique.length} trazados · {(downloads.reduce((total,item)=>total+item.bytes,0)/1024).toLocaleString('es-ES',{maximumFractionDigits:1})} KB adicionales.</p>
+          {unique.length ? unique.map(item=><div className="settingsDownload" key={item.id}><strong>{item.name}</strong><button type="button" onClick={()=>remove(item)}>Eliminar trazado</button></div>) : <p>No hay trazados guardados en este navegador.</p>}
+        </div>
       </details>
       <details><summary>Permisos del dispositivo</summary>
         <dl>{[['geolocation','Ubicación'],['camera','Cámara'],['notifications','Notificaciones']].map(([key,label])=><div key={key}><dt>{label}</dt><dd>{permissions[key]||'Consultando…'}</dd></div>)}</dl>
