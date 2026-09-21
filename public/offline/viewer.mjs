@@ -1,5 +1,5 @@
 import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
-import {renderMosaicForBounds} from './mosaic.mjs';
+import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
 import {bearingDegrees,breadcrumbReturn,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,shouldSaveBreadcrumb} from './nav.mjs';
 const $=id=>document.getElementById(id), tracks=[];
 let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null;
@@ -151,11 +151,17 @@ async function select(){
 }
 $('routes').addEventListener('change',select);select();
 $('download').onclick=async()=>{
-  if(controller || !track)return;const current=track,version=selection;controller=new AbortController();
-  const active=controller,timer=setTimeout(()=>active.abort(),45000);$('cancel').hidden=false;connection();$('downloadStatus').textContent='Descargando y comprobando el mapa del IGN…';
-  try {const saved=await downloadMap(current,{signal:active.signal});if(version!==selection)return;record=saved;mosaicRecord=null;navigationRecord=null;render();$('downloadStatus').textContent='Descarga completa y guardada. Puedes comprobarla en modo avión.';try{await navigator.storage?.persist?.();}catch{}}
-  catch(error){if(version===selection)$('downloadStatus').textContent=active.signal.aborted?'Descarga interrumpida. Puedes reintentar; el mapa anterior se conserva.':error.name==='QuotaExceededError'?'No hay espacio suficiente. Elimina un mapa que ya no necesites.':error.message;}
-  finally{clearTimeout(timer);controller=null;$('cancel').hidden=true;connection();}
+  if(controller||!track)return;const current=track,version=selection;controller=new AbortController();
+  const active=controller,timer=setTimeout(()=>active.abort(),120000);$('cancel').hidden=false;connection();$('downloadStatus').textContent='Preparando detalle de ruta zoom 14–15…';
+  try{
+    const pack=await downloadRouteDetail(current,{signal:active.signal,onProgress:p=>{if(version===selection)$('downloadStatus').textContent='Descargando detalle de ruta… '+p.percentage+'%';}});
+    if(version!==selection)return;
+    record=null;navigationRecord=null;mosaicRecord=await renderMosaicForBounds(mapBounds(current));render();
+    $('downloadStatus').textContent='Detalle de ruta descargado · zoom 14–15 · '+pack.totalTiles+' teselas.';
+    try{await navigator.storage?.persist?.();}catch{}
+  }catch(error){
+    if(version===selection)$('downloadStatus').textContent=active.signal.aborted?'Descarga interrumpida. Puedes reintentar; lo ya guardado se conserva.':error.name==='QuotaExceededError'?'No hay espacio suficiente. Elimina un mapa que ya no necesites.':error.message;
+  }finally{clearTimeout(timer);controller=null;$('cancel').hidden=true;connection();}
 };
 $('cancel').onclick=()=>controller?.abort();
 $('remove').onclick=async()=>{const id=track.id,version=selection;try {await removeMap(id);if(version===selection){record=null;try{mosaicRecord=await renderMosaicForBounds(mapBounds(track));}catch{mosaicRecord=null;}render();$('downloadStatus').textContent=mosaicRecord?'Mapa de ruta eliminado. Se seguirá usando la cartografía territorial descargada.':'Mapa eliminado. El trazado se conserva.';}}catch{$('downloadStatus').textContent='No se pudo eliminar el mapa.';}};
