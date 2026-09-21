@@ -3,7 +3,7 @@ import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
 import {accessPathState,bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
 const $=id=>document.getElementById(id), tracks=[];
-let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null;
+let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null,accessRecalculating=false,lastAccessRecalcAt=0,lastAccessRecalcPoint=null;
 try {
   for(let i=0;i<localStorage.length;i++) {
     const key=localStorage.key(i);
@@ -81,7 +81,7 @@ function updateNavigation(current){
       $('navMessage').textContent=access.remainingM<=40?'Has llegado al inicio. Pulsa «Iniciar ruta».':'Sigue la línea azul del acceso peatonal guardado · quedan '+formatDistance(access.remainingM)+'.';
     }else if(accessRoute){
       $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent='—';
-      $('navMessage').textContent='Tu posición está demasiado lejos del acceso peatonal que preparaste. Encúmbrate no dibuja un atajo. Vuelve a un punto conocido del acceso o recalculalo con conexión.';
+      $('navMessage').textContent=navigator.onLine?'Te has apartado del acceso guardado. Encúmbrate recalculará automáticamente desde tu posición actual.':'Tu posición está demasiado lejos del acceso peatonal guardado. Sin conexión no se dibujará ningún atajo.';
     }else{
       $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent=compass(bearing)+' · '+Math.round(bearing)+'°';
       $('navMessage').textContent='No hay acceso peatonal offline preparado. Conéctate y usa «Preparar acceso offline al inicio» antes de salir.';
@@ -264,6 +264,7 @@ function ensureGPS(){
     }
     if(bounds)updatePositionMarker();
     updateNavigation(position);
+    maybeRecalculateAccess();
     if(!liveMap){
       const outside=!bounds||!boundsContainPoint(bounds,position,.04);
       if(navMode!=='idle'||outside)void ensureNavigationFrame(outside);
@@ -271,22 +272,43 @@ function ensureGPS(){
   },error=>{$('position').setAttribute('hidden','');const message=gpsErrorMessage(error);$('gpsStatus').textContent=message;$('navMessage').textContent=message;},{enableHighAccuracy:true,maximumAge:1000,timeout:30000});
 }
 $('gps').onclick=()=>{if(watch!==null){stopGPS();$('gpsStatus').textContent='Posición desactivada.';}else ensureGPS();};
-async function calculateAccessNow(){
-  if(!navigator.onLine||!position||!track?.points?.[0])return null;
+async function calculateAccessNow({force=false}={}){
+  if(accessRecalculating||!navigator.onLine||!position||!track?.points?.[0])return accessRoute;
+  const now=Date.now(),moved=lastAccessRecalcPoint?distanceMetres(lastAccessRecalcPoint,position):Infinity;
+  if(!force&&now-lastAccessRecalcAt<10000&&moved<50)return accessRoute;
+  accessRecalculating=true;lastAccessRecalcAt=now;lastAccessRecalcPoint={lat:position.lat,lon:position.lon};
+  if(navMode==='toStart')$('navMessage').textContent='Recalculando acceso peatonal desde tu posición actual…';
   try{
     const response=await fetch('/api/navigation/return',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:position,to:track.points[0]})});
     const body=await response.json();
-    if(!response.ok||!Array.isArray(body.points)||body.points.length<2)return null;
+    if(!response.ok||!Array.isArray(body.points)||body.points.length<2)throw new Error(body.error||'No se ha encontrado un acceso peatonal fiable.');
     accessRoute={routeId:track.id,from:{lat:position.lat,lon:position.lon,accuracy:position.accuracy,at:position.at},to:track.points[0],points:body.points,distanceM:Number(body.distanceM||0),provider:body.provider||'Mapbox Walking',warning:body.warning||'',savedAt:new Date().toISOString()};
     localStorage.setItem(accessKey(),JSON.stringify(accessRoute));
+    const access=accessState(position);
+    if(navMode==='toStart'&&access?.valid&&liveMap){
+      liveMap.setGuide({bluePoints:access.remaining});
+      if(force)liveMap.fitPoints(access.remaining,64);
+    }
     return accessRoute;
-  }catch{return null}
+  }catch(error){
+    if(navMode==='toStart')$('navMessage').textContent=error.message||'No se ha podido recalcular el acceso peatonal.';
+    return accessRoute;
+  }finally{accessRecalculating=false;}
+}
+function maybeRecalculateAccess(){
+  if(navMode!=='toStart'||!navigator.onLine||!position||Number(position.accuracy)>80)return;
+  const access=accessState(position);
+  if(access?.valid)return;
+  void calculateAccessNow({force:false});
 }
 $('toStart').onclick=async()=>{
   ensureGPS();setNavMode('toStart','Comprobando acceso peatonal al inicio…');
   if(!position){$('navMessage').textContent='Esperando una posición GPS antes de abrir el acceso al inicio.';return;}
-  if(!accessRoute&&navigator.onLine)await calculateAccessNow();
-  const access=accessState(position);
+  let access=accessState(position);
+  if((!accessRoute||!access?.valid)&&navigator.onLine){
+    await calculateAccessNow({force:true});
+    access=accessState(position);
+  }
   if(access?.valid&&liveMap){
     liveMap.fitPoints(access.remaining,64);liveMap.setFollow(false);liveMap.setGuide({bluePoints:access.remaining});
   }else if(liveMap){
