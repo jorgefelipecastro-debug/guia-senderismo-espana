@@ -42,3 +42,28 @@ test('el routing peatonal usa Railway como primario con fallback Vercel',async()
   assert.match(prep,/operationalFetch\('\/api\/navigation\/return'/);
   assert.match(viewer,/operationalFetch\('\/api\/navigation\/return'/);
 });
+
+
+test('operationalFetch cae a Vercel cuando Railway responde 503',async()=>{
+  const {operationalFetch}=await import('../lib/operational-api.js');
+  const calls=[];
+  const fakeFetch=async(url,options)=>{
+    calls.push({url:String(url),credentials:options?.credentials});
+    if(String(url).startsWith('https://encumbrate-web-production.up.railway.app'))
+      return new Response('railway missing secret',{status:503});
+    return new Response('vercel fallback',{status:200});
+  };
+  const response=await operationalFetch('/api/navigation/return',{method:'POST'},fakeFetch);
+  assert.equal(response.status,200);
+  assert.equal(calls.length,2);
+  assert.match(calls[0].url,/railway\.app\/api\/navigation\/return/);
+  assert.equal(calls[1].url,'/api/navigation/return');
+});
+
+test('routing peatonal acepta CORS operativo y OPTIONS',async()=>{
+  const source=await readFile(new URL('../app/api/navigation/return/route.js',import.meta.url),'utf8');
+  assert.match(source,/withOperationalCors/);
+  assert.match(source,/export async function OPTIONS/);
+  assert.match(source,/POST, OPTIONS/);
+  assert.match(source,/MAPBOX_ACCESS_TOKEN/);
+});
