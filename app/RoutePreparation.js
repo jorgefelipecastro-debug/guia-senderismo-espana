@@ -4,6 +4,8 @@ import './route-preparation.css';
 import {downloadRouteOfflinePack,getOfflinePack} from '../lib/offline-mosaic';
 import {operationalFetch} from '../lib/operational-api';
 
+const ACCESS_PROFILE='street-walking-v2';
+
 export default function RoutePreparation({ route, download, readSaved }) {
   const [saved, setSaved] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -20,7 +22,7 @@ export default function RoutePreparation({ route, download, readSaved }) {
       getOfflinePack(`route:${route.id}`).then(setMapPack).catch(()=>{});
       try {
         const access=JSON.parse(localStorage.getItem(`encumbrate:offline-access:${route.id}`)||'null');
-        setAccessReady(Boolean(access?.points?.length>1));
+        setAccessReady(Boolean(access?.points?.length>1&&access?.routingProfile===ACCESS_PROFILE));
       } catch { setAccessReady(false); }
     };
     sync();
@@ -68,6 +70,7 @@ export default function RoutePreparation({ route, download, readSaved }) {
         points:body.points,
         distanceM:Number(body.distanceM||0),
         provider:body.provider||'Mapbox Walking',
+        routingProfile:body.routingProfile||ACCESS_PROFILE,
         warning:body.warning||'',
         savedAt:new Date().toISOString(),
       };
