@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { validateReturnRoute } from "../../../../lib/navigation-geometry";
+import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors.js";
 
 export const dynamic = "force-dynamic";
 const coordinate = (value) => Number.isFinite(value) && Math.abs(value) <= 180;
@@ -9,10 +10,10 @@ export async function POST(request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json(
+    return withOperationalCors(request, NextResponse.json(
       { error: "Solicitud no válida." },
       { status: 400 },
-    );
+    ), "POST, OPTIONS");
   }
   const from = { lat: Number(body?.from?.lat), lon: Number(body?.from?.lon) },
     to = { lat: Number(body?.to?.lat), lon: Number(body?.to?.lon) };
@@ -24,16 +25,16 @@ export async function POST(request) {
     Math.abs(from.lat) > 90 ||
     Math.abs(to.lat) > 90
   )
-    return NextResponse.json(
+    return withOperationalCors(request, NextResponse.json(
       { error: "Coordenadas no válidas." },
       { status: 400 },
-    );
+    ), "POST, OPTIONS");
   const token = process.env.MAPBOX_ACCESS_TOKEN;
   if (!token)
-    return NextResponse.json(
+    return withOperationalCors(request, NextResponse.json(
       { error: "El retorno Mapbox no está configurado." },
-      { status: 503 },
-    );
+      { status: 503, headers: { "X-Encumbrate-Routing": "mapbox-not-configured" } },
+    ), "POST, OPTIONS");
   try {
     const url = new URL(
       `https://api.mapbox.com/directions/v5/mapbox/walking/${from.lon},${from.lat};${to.lon},${to.lat}`,
@@ -58,19 +59,23 @@ export async function POST(request) {
       distanceM = Math.round(data.routes[0].distance),
       validation = validateReturnRoute({ from, to, points, distanceM });
     if (!validation.safe)
-      return NextResponse.json({ error: validation.reason }, { status: 422 });
-    return NextResponse.json({
+      return withOperationalCors(request, NextResponse.json({ error: validation.reason }, { status: 422 }), "POST, OPTIONS");
+    return withOperationalCors(request, NextResponse.json({
       points,
       distanceM,
       provider: "Mapbox Walking",
       verified: false,
       warning:
         "Ruta orientativa calculada sobre caminos cartografiados. Comprueba el terreno antes de avanzar.",
-    });
+    }), "POST, OPTIONS");
   } catch {
-    return NextResponse.json(
+    return withOperationalCors(request, NextResponse.json(
       { error: "No hay ahora una ruta peatonal fiable hasta el sendero." },
       { status: 503 },
-    );
+    ), "POST, OPTIONS");
   }
+}
+
+export async function OPTIONS(request) {
+  return operationalOptions(request, "POST, OPTIONS");
 }
