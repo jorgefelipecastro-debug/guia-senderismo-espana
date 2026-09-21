@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {gpsFixFresh,gpsFixUsable,navigationHeading,nearestPolylinePoint,plausibleGpsTransition,routeProximity} from '../lib/navigation-geometry';
 import {downloadLiveOfflineMap,leafletBoundsFromMercator,liveMapRecordCovers,readLiveOfflineMap} from '../lib/live-offline-map';
+import {hasOfflineMosaicPoint,readBestOfflineTile} from '../lib/offline-mosaic';
 
 const OSM_TILE_STALL_MS=3500;
 const OSM_RECOVERY_MS=1200;
@@ -11,12 +12,13 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
   const nodeRef=useRef(null),mapRef=useRef(null),userRef=useRef(null),followingRef=useRef(true),previousFixRef=useRef(null),lastGoodAtRef=useRef(null),probeBlockedRef=useRef(false),offlineUrlRef=useRef(null),offlineRecordRef=useRef(null),ensureOfflineCoverageRef=useRef(null),positionRef=useRef(null),[position,setPosition]=useState(null),[offRoute,setOffRoute]=useState(null),[gpsState,setGpsState]=useState('searching'),[tileError,setTileError]=useState(false),[offlineMapState,setOfflineMapState]=useState('checking'),[following,setFollowing]=useState(true);
   useEffect(()=>{followingRef.current=following},[following]);
   useEffect(()=>{
-    let active=true,offlineLayer=null,preparing=false,queuedCoveragePoint=null,tiles=null,forceOffline=false,tileCycleFailed=false,tileCycleSuccess=0,tileFailureTimer=null,healthyRecoveryTimer=null;
+    let active=true,offlineLayer=null,mosaicLayer=null,preparing=false,queuedCoveragePoint=null,tiles=null,forceOffline=false,tileCycleFailed=false,tileCycleSuccess=0,tileFailureTimer=null,healthyRecoveryTimer=null;
     const abort=new AbortController();
     async function mount(){
       const L=(await import('leaflet')).default;if(!active||!nodeRef.current)return;
       const points=track.points.map(p=>[p.lat,p.lon]),map=L.map(nodeRef.current,{zoomControl:false,attributionControl:true});mapRef.current=map;
       if(!map.getPane('offlineBasemap')){const pane=map.createPane('offlineBasemap');pane.style.zIndex='250';pane.style.pointerEvents='none'}
+      if(!map.getPane('offlineMosaic')){const pane=map.createPane('offlineMosaic');pane.style.zIndex='260';pane.style.pointerEvents='none'}
 
       const viewportCoveragePoints=()=>{
         if(!map||!Number.isFinite(map.getZoom()))return [];
@@ -31,6 +33,12 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         ];
       };
       const recordCoversViewport=record=>viewportCoveragePoints().every(point=>liveMapRecordCovers(record,point,0));
+      const mosaicCoversViewport=async(extraPoint=null)=>{
+        const zoom=Number.isFinite(map.getZoom())?Math.round(map.getZoom()):15,points=[...viewportCoveragePoints(),...(extraPoint?[extraPoint]:[])];
+        if(!points.length)return false;
+        const coverage=await Promise.all(points.map(point=>hasOfflineMosaicPoint(point,zoom,7)));
+        return coverage.every(Boolean);
+      };
 
       const updateUserMarker=current=>{
         if(!active||!current)return;
@@ -48,6 +56,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         const useOffline=forceOffline||!navigator.onLine;
         tiles?.setOpacity(useOffline?0:1);
         offlineLayer?.setOpacity(useOffline?1:0);
+        mosaicLayer?.setOpacity(useOffline?1:0);
       };
 
       async function activateOfflineFallback(){
@@ -89,6 +98,24 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         scheduleHealthyRecovery();
       };
 
+      const OfflineMosaicLayer=L.GridLayer.extend({
+        createTile(coords,done){
+          const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
+          readBestOfflineTile(coords.z,coords.x,coords.y).then(async hit=>{
+            if(!hit){done(null,canvas);return}
+            const image=await createImageBitmap(hit.record.blob),ctx=canvas.getContext('2d');
+            try{
+              const crop=256/hit.factor,sx=hit.subX*crop,sy=hit.subY*crop;
+              ctx.drawImage(image,sx,sy,crop,crop,0,0,256,256);done(null,canvas);
+            }catch(error){done(error,canvas)}finally{image.close()}
+          }).catch(error=>done(error,canvas));
+          return canvas;
+        }
+      });
+      mosaicLayer=new OfflineMosaicLayer({pane:'offlineMosaic',tileSize:256,minZoom:5,maxZoom:19,opacity:0,attribution:'© Instituto Geográfico Nacional'}).addTo(map);
+      const refreshMosaic=()=>mosaicLayer?.redraw();
+      window.addEventListener('encumbrate:offline-mosaic',refreshMosaic);
+
       tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'})
         .on('loading',startTileCycle)
         .on('tileloadstart',armTileFailureWatchdog)
@@ -117,6 +144,12 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
         }
         preparing=true;setOfflineMapState('checking');
         try{
+          const mosaicReady=await mosaicCoversViewport(extraPoint);
+          if(mosaicReady){
+            const stored=await readLiveOfflineMap(track).catch(()=>null);
+            if(stored&&!offlineRecordRef.current)installRecord(stored);
+            setOfflineMapState('ready');applyNetworkLayerState();return;
+          }
           let record=await readLiveOfflineMap(track);
           const viewportPoints=viewportCoveragePoints();
           const extraPoints=[...(extraPoint?[extraPoint]:[]),...viewportPoints];
@@ -147,6 +180,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
 
       ensureOfflineCoverageRef.current=async current=>{
         if(!active||!current)return;
+        if(await mosaicCoversViewport(current)){setOfflineMapState('ready');applyNetworkLayerState();return}
         const record=offlineRecordRef.current||await readLiveOfflineMap(track);
         if(record&&liveMapRecordCovers(record,current)&&recordCoversViewport(record)){if(!offlineRecordRef.current)installRecord(record);setOfflineMapState('ready');return}
         if(navigator.onLine)await prepareOffline(current,true);
@@ -154,7 +188,7 @@ export default function LiveRouteGuide({route,track,onBack,onLost,onFinish}){
 
       const offline=()=>{clearTileFailureTimer();clearHealthyRecoveryTimer();forceOffline=true;setTileError(true);applyNetworkLayerState();prepareOffline(positionRef.current||null)};
       const online=()=>{forceOffline=true;setTileError(true);tileCycleFailed=false;tileCycleSuccess=0;clearHealthyRecoveryTimer();applyNetworkLayerState();prepareOffline(positionRef.current||null);tiles?.redraw();armTileFailureWatchdog()};
-      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();map.off('moveend zoomend resize',onMoveEnd);map._encumbrateSetUserPosition=null;ensureOfflineCoverageRef.current=null};
+      window.addEventListener('offline',offline);window.addEventListener('online',online);map._encumbrateCleanup=()=>{window.removeEventListener('offline',offline);window.removeEventListener('online',online);window.removeEventListener('encumbrate:offline-mosaic',refreshMosaic);clearTileFailureTimer();clearHealthyRecoveryTimer();tiles?.off();mosaicLayer?.off();map.off('moveend zoomend resize',onMoveEnd);map._encumbrateSetUserPosition=null;ensureOfflineCoverageRef.current=null};
       await prepareOffline(positionRef.current||null);
       applyNetworkLayerState();
     }
