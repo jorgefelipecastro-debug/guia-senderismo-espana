@@ -36,6 +36,15 @@ jobs:
       - name: Run automated tests
         run: npm test
 
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile
+
+      - name: Test mobile offline storage
+        run: npm test --prefix mobile
+
+      - name: Typecheck mobile application
+        run: npm run typecheck --prefix mobile
+
       - name: Build Next.js application
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-build-only.supabase.co
