@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import './route-preparation.css';
 import {downloadRouteOfflinePack,getOfflinePack} from '../lib/offline-mosaic';
+import {operationalFetch} from '../lib/operational-api';
 
 export default function RoutePreparation({ route, download, readSaved }) {
   const [saved, setSaved] = useState(null);
@@ -53,7 +54,7 @@ export default function RoutePreparation({ route, download, readSaved }) {
       if(!Array.isArray(track?.points)||track.points.length<2)throw new Error('El trazado no tiene un inicio válido.');
       const from=await currentPosition(),to=track.points[0];
       if(from.accuracy>80)throw new Error('La precisión GPS es demasiado baja para preparar el acceso. Busca cielo abierto y vuelve a intentarlo.');
-      const response=await fetch('/api/navigation/return',{
+      const response=await operationalFetch('/api/navigation/return',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({from,to}),
