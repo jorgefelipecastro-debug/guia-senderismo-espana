@@ -18,16 +18,20 @@ function connection(){ $('connection').textContent=navigator.onLine?'Con conexi�
 window.addEventListener('online',connection);window.addEventListener('offline',connection);connection();
 function breadcrumbKey(){return track?'encumbrate:offline-breadcrumbs:'+track.id:'';}
 function loadBreadcrumbs(){try{const value=JSON.parse(localStorage.getItem(breadcrumbKey())||'[]');return Array.isArray(value)?value.filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon)).slice(-1500):[]}catch{return[]}}
-function saveBreadcrumb(point){if(!track||!point)return;const previous=breadcrumbs.at(-1);if(!shouldSaveBreadcrumb(previous,point,8))return;breadcrumbs=[...breadcrumbs,{lat:point.lat,lon:point.lon,at:Date.now()}].slice(-1500);try{localStorage.setItem(breadcrumbKey(),JSON.stringify(breadcrumbs))}catch{}}
+function saveBreadcrumb(point){if(!track||!point)return;const previous=breadcrumbs.at(-1);if(!shouldSaveBreadcrumb(previous,point,8))return;breadcrumbs=[...breadcrumbs,{lat:point.lat,lon:point.lon,accuracy:Number(point.accuracy||0),at:Date.now()}].slice(-1500);try{localStorage.setItem(breadcrumbKey(),JSON.stringify(breadcrumbs))}catch{}}
 function linePath(points){if(!bounds||!Array.isArray(points)||points.length<2)return'';return points.map((p,i)=>{const q=pixel(p,bounds);return (i?'L':'M')+q.x.toFixed(2)+' '+q.y.toFixed(2)}).join(' ')}
 function setNavMode(mode,message=''){navMode=mode;const labels={idle:'Lista para empezar.',toStart:'Orientación al inicio',route:'Navegación activa',lost:'Volver al sendero'};$('navMode').textContent=labels[mode]||labels.idle;$('stopGuide').hidden=mode==='idle';$('toStart').disabled=mode==='toStart';$('startRoute').disabled=mode==='route';$('lost').disabled=mode==='lost';if(message)$('navMessage').textContent=message;updateNavigation(position)}
 function returnGuidePoints(){
-  if(!position||!track)return[];
+  if(!position||!track||breadcrumbs.length<3)return[];
   const back=breadcrumbReturn(position,breadcrumbs,track.points,35);
-  const nearest=routeMetrics(position,track.points,position.accuracy);
-  const reachesTrail=back.length>1&&back.some(point=>routeMetrics(point,track.points,30)?.distance<=35);
-  if(reachesTrail)return back;
-  return nearest?.point?[position,nearest.point]:[];
+  if(back.length<3)return[];
+  const end=back.at(-1),endMetrics=routeMetrics(end,track.points,Math.max(10,Number(end?.accuracy||30)));
+  if(!endMetrics||endMetrics.distance>35)return[];
+  for(let i=1;i<back.length;i++){
+    const step=distanceMetres(back[i-1],back[i]);
+    if(!Number.isFinite(step)||step>120)return[];
+  }
+  return back;
 }
 function drawNavigation(){
   $('guideLine').setAttribute('d','');$('returnLine').setAttribute('d','');
@@ -60,8 +64,8 @@ function updateNavigation(current){
   }else if(navMode==='lost'){
     const path=returnGuidePoints(),usingBreadcrumbs=path.length>2;
     $('navDistance').textContent=metrics?formatDistance(metrics.distance):'—';
-    $('navBearing').textContent=usingBreadcrumbs?(path.length-1)+' puntos GPS':'Directo';
-    $('navMessage').textContent=onRoute?'Has recuperado el sendero. Pulsa «Iniciar ruta».':usingBreadcrumbs?'Sigue la línea roja por tus propios pasos hasta volver al trazado verde.':'La línea roja señala directamente el punto más cercano del sendero. No representa un camino transitable.';
+    $('navBearing').textContent=usingBreadcrumbs?(path.length-1)+' puntos GPS':'—';
+    $('navMessage').textContent=onRoute?'Has recuperado el sendero. Pulsa «Iniciar ruta».':usingBreadcrumbs?'Sigue la línea roja únicamente por tus propios pasos registrados hasta volver al trazado verde.':'No hay un retorno offline seguro calculado. Encúmbrate no dibuja una línea recta porque podría atravesar terreno peligroso. Vuelve por un camino conocido o recupera conexión.';
   }else{
     $('navDistance').textContent=formatDistance(toStart);$('navBearing').textContent=compass(bearing)+' · '+Math.round(bearing)+'°';
     $('navMessage').textContent='GPS listo. Elige «Ir al inicio» o «Iniciar ruta».';
@@ -239,10 +243,16 @@ $('startRoute').onclick=()=>{
   }
 };
 $('lost').onclick=()=>{
-  ensureGPS();setNavMode('lost','Preparando retorno al sendero…');
+  ensureGPS();setNavMode('lost','Comprobando si existe un retorno offline seguro…');
   if(position&&liveMap){
     const red=returnGuidePoints();
-    if(red.length>1)liveMap.fitPoints(red,70);
+    if(red.length>2){
+      liveMap.fitPoints(red,70);
+      liveMap.setGuide({redPoints:red});
+    }else{
+      liveMap.setGuide({redPoints:[]});
+      $('navMessage').textContent='No hay suficientes migas GPS fiables para guiarte de vuelta. No avances siguiendo una línea recta: usa un camino conocido o recupera conexión.';
+    }
   }else setTimeout(()=>void ensureNavigationFrame(true),100);
 };
 $('stopGuide').onclick=()=>{navigationRecord=null;lastViewPoint=null;setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');liveMap?.setGuide({});liveMap?.fitTrack();render();};
