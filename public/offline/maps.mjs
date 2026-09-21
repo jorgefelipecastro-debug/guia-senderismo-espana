@@ -4,6 +4,24 @@ export const MAX_BYTES = 10 * 1024 * 1024;
 export const SIZE = 2048;
 const R = 6378137;
 export const project = p => ({x: R * p.lon * Math.PI / 180, y: R * Math.log(Math.tan(Math.PI / 4 + p.lat * Math.PI / 360))});
+export function squareBoundsForPoints(points,{paddingRatio=.15,minPadding=600,minSpan=2000,maxSpan=120000}={}){
+  const valid=(Array.isArray(points)?points:[]).filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon));
+  if(!valid.length)throw Error('No hay coordenadas suficientes para encuadrar el mapa.');
+  const projected=valid.map(project);
+  let west=Infinity,east=-Infinity,south=Infinity,north=-Infinity;
+  for(const p of projected){west=Math.min(west,p.x);east=Math.max(east,p.x);south=Math.min(south,p.y);north=Math.max(north,p.y);}
+  const width=Math.max(1,east-west),height=Math.max(1,north-south);
+  const padding=Math.max(minPadding,Math.max(width,height)*Math.max(0,Number(paddingRatio)||0));
+  const span=Math.max(minSpan,width+padding*2,height+padding*2);
+  if(span>maxSpan)throw Error('La zona es demasiado extensa para este visor offline.');
+  const x=(west+east)/2,y=(south+north)/2;
+  return[x-span/2,y-span/2,x+span/2,y+span/2];
+}
+export function boundsContainPoint(bounds,point,marginRatio=0){
+  if(!Array.isArray(bounds)||bounds.length!==4||!point)return false;
+  const p=project(point),mx=(bounds[2]-bounds[0])*Math.max(0,Number(marginRatio)||0),my=(bounds[3]-bounds[1])*Math.max(0,Number(marginRatio)||0);
+  return p.x>=bounds[0]+mx&&p.x<=bounds[2]-mx&&p.y>=bounds[1]+my&&p.y<=bounds[3]-my;
+}
 export function validTrack(track) {
   return track && typeof track.id === 'string' && Array.isArray(track.points) && track.points.length >= 2 && track.points.length <= 20000 && track.points.every(p => Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.lat >= 27 && p.lat <= 45 && p.lon >= -19 && p.lon <= 5);
 }
