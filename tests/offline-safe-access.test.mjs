@@ -7,7 +7,7 @@ test('Ir al inicio usa un acceso peatonal guardado y no una recta GPS-inicio',as
   assert.match(viewer,/encumbrate:offline-access:/);
   assert.match(viewer,/accessPathState/);
   assert.match(viewer,/Sigue la línea azul del acceso peatonal guardado/);
-  assert.match(viewer,/Sin conexión no se dibujará ningún atajo/);
+  assert.match(viewer,/Sin conexión. La última ruta válida permanece visible en azul/);
   assert.doesNotMatch(viewer,/bluePoints=\[position,track\.points\[0\]\]/);
   assert.doesNotMatch(viewer,/points=\[position,track\.points\[0\]\]/);
 });
@@ -34,6 +34,16 @@ test('Ir al inicio recalcula automaticamente al apartarse del acceso con conexio
 
 test('sin conexion nunca sustituye el acceso por una linea recta',async()=>{
   const viewer=await readFile(new URL('../public/offline/viewer.mjs',import.meta.url),'utf8');
-  assert.match(viewer,/Sin conexión no se dibujará ningún atajo/);
+  assert.match(viewer,/Sin conexión. La última ruta válida permanece visible en azul/);
+  assert.doesNotMatch(viewer,/bluePoints=\[position,track\.points\[0\]\]/);
+});
+
+
+test('sin conexion mantiene visible el ultimo acceso valido y muestra distancia hasta el',async()=>{
+  const viewer=await readFile(new URL('../public/offline/viewer.mjs',import.meta.url),'utf8');
+  assert.match(viewer,/última ruta válida permanece visible en azul/);
+  assert.match(viewer,/de su punto más cercano/);
+  assert.match(viewer,/bluePoints=accessRoute\.points/);
+  assert.match(viewer,/fitPoints\(\[position,\.\.\.accessRoute\.points\],64\)/);
   assert.doesNotMatch(viewer,/bluePoints=\[position,track\.points\[0\]\]/);
 });
