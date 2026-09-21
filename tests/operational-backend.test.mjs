@@ -30,9 +30,9 @@ test('las APIs operativas permiten CORS limitado y no wildcard',async()=>{
   assert.doesNotMatch(cors,/Access-Control-Allow-Origin[^\n]*\*/);
 });
 
-test('el modo offline cachea el cliente Railway v26',async()=>{
+test('el modo offline cachea el cliente Railway v27',async()=>{
   const worker=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-  assert.match(worker,/encumbrate-public-v26/);
+  assert.match(worker,/encumbrate-public-v27/);
   assert.match(worker,/\/offline\/api\.mjs/);
 });
 
@@ -66,4 +66,18 @@ test('routing peatonal acepta CORS operativo y OPTIONS',async()=>{
   assert.match(source,/export async function OPTIONS/);
   assert.match(source,/POST, OPTIONS/);
   assert.match(source,/MAPBOX_ACCESS_TOKEN/);
+});
+
+
+test('routing peatonal prioriza calles y versiona el perfil guardado',async()=>{
+  const [api,prep,viewer]=await Promise.all([
+    readFile(new URL('../app/api/navigation/return/route.js',import.meta.url),'utf8'),
+    readFile(new URL('../app/RoutePreparation.js',import.meta.url),'utf8'),
+    readFile(new URL('../public/offline/viewer.mjs',import.meta.url),'utf8'),
+  ]);
+  assert.match(api,/walkway_bias", "-1"/);
+  assert.match(api,/routingProfile: "street-walking-v2"/);
+  assert.match(prep,/ACCESS_PROFILE='street-walking-v2'/);
+  assert.match(viewer,/ACCESS_PROFILE='street-walking-v2'/);
+  assert.match(viewer,/value\?\.routingProfile!==ACCESS_PROFILE/);
 });
