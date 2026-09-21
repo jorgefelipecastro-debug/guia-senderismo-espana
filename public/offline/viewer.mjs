@@ -1,8 +1,9 @@
 import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
 import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
 import {bearingDegrees,breadcrumbReturn,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,shouldSaveBreadcrumb} from './nav.mjs';
+import {createOfflineGpsMap} from './tile-map.mjs';
 const $=id=>document.getElementById(id), tracks=[];
-let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null;
+let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false;
 try {
   for(let i=0;i<localStorage.length;i++) {
     const key=localStorage.key(i);
@@ -30,9 +31,15 @@ function returnGuidePoints(){
 }
 function drawNavigation(){
   $('guideLine').setAttribute('d','');$('returnLine').setAttribute('d','');
+  let bluePoints=[],redPoints=[];
+  if(position&&track){
+    if(navMode==='toStart')bluePoints=[position,track.points[0]];
+    if(navMode==='lost')redPoints=returnGuidePoints();
+  }
+  liveMap?.setGuide({bluePoints,redPoints});
   if(!position||!track||!bounds)return;
-  if(navMode==='toStart')$('guideLine').setAttribute('d',linePath([position,track.points[0]]));
-  if(navMode==='lost')$('returnLine').setAttribute('d',linePath(returnGuidePoints()));
+  if(bluePoints.length)$('guideLine').setAttribute('d',linePath(bluePoints));
+  if(redPoints.length)$('returnLine').setAttribute('d',linePath(redPoints));
 }
 function updateNavigation(current){
   if(!track)return;
@@ -62,7 +69,7 @@ function updateNavigation(current){
   drawNavigation();
 }
 
-function stopGPS(){if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;$('position').setAttribute('hidden','');$('accuracyRing').setAttribute('hidden','');$('gps').textContent='Mostrar mi posición';}
+function stopGPS(){if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;$('position').setAttribute('hidden','');$('accuracyRing').setAttribute('hidden','');liveMap?.setPosition(null);$('gps').textContent='Mostrar mi posición';}
 function centerOnPoint(point){
   if(!point||!bounds)return;
   const p=pixel(point,bounds),viewport=$('viewport');
@@ -135,7 +142,18 @@ function render(resetZoom=true){
   $('attribution').hidden=!source;$('remove').hidden=!record;if(resetZoom){zoom=1;setZoom();}drawNavigation();updatePositionMarker();
 }
 async function select(){
-  const version=++selection;controller?.abort();stopGPS();position=null;setNavMode('idle','Activa el GPS o inicia una guía offline.');track=tracks.find(t=>t.id===$('routes').value);if(!track)return;
+  const version=++selection;controller?.abort();stopGPS();position=null;firstGpsFrame=false;setNavMode('idle','Activa el GPS o inicia una guía offline.');track=tracks.find(t=>t.id===$('routes').value);if(!track)return;
+  liveMap?.destroy?.();liveMap=null;
+  try{
+    liveMap=await createOfflineGpsMap({
+      container:$('gpsMapCanvas'),
+      track,
+      onFollowChange:following=>{$('centerGps').classList.toggle('following',following);}
+    });
+  }catch(error){
+    console.error('No se pudo iniciar el mapa offline interactivo',error);
+    $('gpsMapCanvas').textContent='No se ha podido abrir el mapa interactivo offline.';
+  }
   $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;mosaicRecord=null;navigationRecord=null;lastViewPoint=null;breadcrumbs=loadBreadcrumbs();
   try {
     const saved=await readMap(track.id);
@@ -171,16 +189,18 @@ $('download').onclick=async()=>{
 $('cancel').onclick=()=>controller?.abort();
 $('remove').onclick=async()=>{const id=track.id,version=selection;try {await removeMap(id);if(version===selection){record=null;try{mosaicRecord=await renderMosaicForBounds(mapBounds(track));}catch{mosaicRecord=null;}render();$('downloadStatus').textContent=mosaicRecord?'Mapa de ruta eliminado. Se seguirá usando la cartografía territorial descargada.':'Mapa eliminado. El trazado se conserva.';}}catch{$('downloadStatus').textContent='No se pudo eliminar el mapa.';}};
 function setZoom(){$('map').style.width=`${zoom*100}%`;$('plus').disabled=zoom>=5;$('minus').disabled=zoom<=1;}
-$('plus').onclick=()=>{zoom=Math.min(5,zoom+0.5);setZoom();};$('minus').onclick=()=>{zoom=Math.max(1,zoom-0.5);setZoom();};$('fit').onclick=()=>{zoom=1;setZoom();$('viewport').scrollTo({left:0,top:0,behavior:'smooth'});};
+$('plus').onclick=()=>{if(liveMap)liveMap.zoomIn();else{zoom=Math.min(5,zoom+0.5);setZoom();}};$('minus').onclick=()=>{if(liveMap)liveMap.zoomOut();else{zoom=Math.max(1,zoom-0.5);setZoom();}};$('fit').onclick=()=>{if(liveMap)liveMap.fitTrack();else{zoom=1;setZoom();$('viewport').scrollTo({left:0,top:0,behavior:'smooth'});}};
 $('centerGps').onclick=()=>{
   if(!position){ensureGPS();return;}
+  if(liveMap){liveMap.recenter({zoom:14});return;}
   void ensureNavigationFrame(true).then(()=>centerOnPoint(position));
 };
 $('fullscreen').onclick=()=>{
   const viewport=$('viewport'),active=viewport.classList.toggle('fullscreenMap');
   $('fullscreen').textContent=active?'✕':'⛶';
   document.body.style.overflow=active?'hidden':'';
-  if(position)setTimeout(()=>centerOnPoint(position),80);
+  setTimeout(()=>window.dispatchEvent(new Event('resize')),50);
+  if(position&&!liveMap)setTimeout(()=>centerOnPoint(position),80);
 };
 function ensureGPS(){
   if(watch!==null)return;
@@ -189,24 +209,50 @@ function ensureGPS(){
   watch=navigator.geolocation.watchPosition(({coords,timestamp})=>{
     lastFix=timestamp;position={lat:coords.latitude,lon:coords.longitude,accuracy:Number(coords.accuracy||999),heading:Number(coords.heading),speed:Number(coords.speed),at:timestamp};
     if((navMode==='route'||navMode==='lost')&&position.accuracy<=80)saveBreadcrumb(position);
+    liveMap?.setPosition(position,{followUser:liveMap?.isFollowing?.()});
+    if(!firstGpsFrame&&liveMap){
+      const metrics=routeMetrics(position,track.points,position.accuracy);
+      if(metrics?.distance>500)liveMap.fitPoints([position,metrics.point],64);
+      else liveMap.recenter({zoom:14});
+      firstGpsFrame=true;
+    }
     if(bounds)updatePositionMarker();
     updateNavigation(position);
-    const outside=!bounds||!boundsContainPoint(bounds,position,.04);
-    if(navMode!=='idle'||outside)void ensureNavigationFrame(outside);
+    if(!liveMap){
+      const outside=!bounds||!boundsContainPoint(bounds,position,.04);
+      if(navMode!=='idle'||outside)void ensureNavigationFrame(outside);
+    }
   },error=>{$('position').setAttribute('hidden','');const message=gpsErrorMessage(error);$('gpsStatus').textContent=message;$('navMessage').textContent=message;},{enableHighAccuracy:true,maximumAge:1000,timeout:30000});
 }
 $('gps').onclick=()=>{if(watch!==null){stopGPS();$('gpsStatus').textContent='Posición desactivada.';}else ensureGPS();};
-$('toStart').onclick=()=>{ensureGPS();setNavMode('toStart','Buscando el inicio con GPS offline…');setTimeout(()=>void ensureNavigationFrame(true),100);};
-$('startRoute').onclick=()=>{ensureGPS();navigationRecord=null;lastViewPoint=null;setNavMode('route','Navegación de ruta activa.');if(position){saveBreadcrumb(position);setTimeout(()=>void ensureNavigationFrame(true),100);}};
-$('lost').onclick=()=>{ensureGPS();setNavMode('lost','Preparando retorno al sendero…');setTimeout(()=>void ensureNavigationFrame(true),100);};
-$('stopGuide').onclick=()=>{navigationRecord=null;lastViewPoint=null;setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');render();};
+$('toStart').onclick=()=>{
+  ensureGPS();setNavMode('toStart','Buscando el inicio con GPS offline…');
+  if(position&&liveMap){liveMap.fitPoints([position,track.points[0]],64);liveMap.setFollow(false);}
+  else setTimeout(()=>void ensureNavigationFrame(true),100);
+};
+$('startRoute').onclick=()=>{
+  ensureGPS();navigationRecord=null;lastViewPoint=null;setNavMode('route','Navegación de ruta activa.');
+  if(position){
+    saveBreadcrumb(position);
+    if(liveMap)liveMap.recenter({zoom:15});
+    else setTimeout(()=>void ensureNavigationFrame(true),100);
+  }
+};
+$('lost').onclick=()=>{
+  ensureGPS();setNavMode('lost','Preparando retorno al sendero…');
+  if(position&&liveMap){
+    const red=returnGuidePoints();
+    if(red.length>1)liveMap.fitPoints(red,70);
+  }else setTimeout(()=>void ensureNavigationFrame(true),100);
+};
+$('stopGuide').onclick=()=>{navigationRecord=null;lastViewPoint=null;setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');liveMap?.setGuide({});liveMap?.fitTrack();render();};
 const freshness=setInterval(()=>{if(watch!==null && lastFix && Date.now()-lastFix>30000){$('position').setAttribute('hidden','');$('gpsStatus').textContent='La posición GPS está desactualizada. Esperando una nueva señal…';}},5000);
-window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();document.body.style.overflow='';if(imageURL)URL.revokeObjectURL(imageURL);});
+window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();liveMap?.destroy?.();document.body.style.overflow='';if(imageURL)URL.revokeObjectURL(imageURL);});
 (async()=>{
   try{
-    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=19',{updateViaCache:'none'});
-    const cache=await caches.open('encumbrate-public-v19');
-    const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/nav.mjs'].map(path=>cache.match(path)));
+    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=20',{updateViaCache:'none'});
+    const cache=await caches.open('encumbrate-public-v20');
+    const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/nav.mjs','/offline/tile-map.mjs'].map(path=>cache.match(path)));
     $('bootStatus').textContent=resources.every(Boolean)?'Navegación offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
   }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}
 })();
