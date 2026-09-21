@@ -31,9 +31,11 @@ export async function GET(request) {
     return NextResponse.json(
       {
         points: sample(points),
+        segments: geometry.segments.map(segment => sample(segment, 1200)).filter(segment => segment.length > 1),
         distanceKm: routeDistanceKm(geometry.segments),
         source: geometry.source,
         official: geometry.official,
+        geometryVersion: "segments-v2",
       },
       {
         headers: {
