@@ -3,6 +3,7 @@ import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
 import {accessPathState,bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
 import {operationalFetch} from './api.mjs';
+const ACCESS_PROFILE='street-walking-v2';
 const $=id=>document.getElementById(id), tracks=[];
 let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null,accessRecalculating=false,lastAccessRecalcAt=0,lastAccessRecalcPoint=null;
 try {
@@ -21,7 +22,7 @@ function breadcrumbKey(){return track?'encumbrate:offline-breadcrumbs:'+track.id
 function loadAccessRoute(){
   try{
     const value=JSON.parse(localStorage.getItem(accessKey())||'null');
-    if(!Array.isArray(value?.points)||value.points.length<2)return null;
+    if(!Array.isArray(value?.points)||value.points.length<2||value?.routingProfile!==ACCESS_PROFILE)return null;
     if(!value.points.every(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon)))return null;
     return value;
   }catch{return null}
@@ -291,7 +292,7 @@ async function calculateAccessNow({force=false}={}){
     const response=await operationalFetch('/api/navigation/return',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:position,to:track.points[0]})});
     const body=await response.json();
     if(!response.ok||!Array.isArray(body.points)||body.points.length<2)throw new Error(body.error||'No se ha encontrado un acceso peatonal fiable.');
-    accessRoute={routeId:track.id,from:{lat:position.lat,lon:position.lon,accuracy:position.accuracy,at:position.at},to:track.points[0],points:body.points,distanceM:Number(body.distanceM||0),provider:body.provider||'Mapbox Walking',warning:body.warning||'',savedAt:new Date().toISOString()};
+    accessRoute={routeId:track.id,from:{lat:position.lat,lon:position.lon,accuracy:position.accuracy,at:position.at},to:track.points[0],points:body.points,distanceM:Number(body.distanceM||0),provider:body.provider||'Mapbox Walking',routingProfile:body.routingProfile||ACCESS_PROFILE,warning:body.warning||'',savedAt:new Date().toISOString()};
     localStorage.setItem(accessKey(),JSON.stringify(accessRoute));
     const access=accessState(position);
     if(navMode==='toStart'&&access?.valid&&liveMap){
