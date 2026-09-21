@@ -14,7 +14,7 @@ export function bearingDegrees(a,b){
 }
 
 export function compass(degrees){
-  return ['N','NE','E','SE','S','SO','O','NO'][Math.round((((Number(degrees)||0)%360)+360)%360)/45)%8];
+  return ['N','NE','E','SE','S','SO','O','NO'][Math.round(((((Number(degrees)||0)%360)+360)%360)/45)%8];
 }
 
 export function nearestPolylinePoint(position,points){
