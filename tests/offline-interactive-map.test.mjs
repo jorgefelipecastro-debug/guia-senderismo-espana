@@ -15,7 +15,7 @@ test('el visor ofrece mapa grande, centrado GPS y pantalla completa',async()=>{
   const html=await readFile(new URL('../public/offline.html',import.meta.url),'utf8');
   assert.match(html,/id="centerGps"/);
   assert.match(html,/id="fullscreen"/);
-  assert.match(html,/height:min\(68vh,720px\)/);
+  assert.match(html,/aspect-ratio:1\/1/);
   assert.match(html,/Descargar detalle de esta ruta/);
 });
 
