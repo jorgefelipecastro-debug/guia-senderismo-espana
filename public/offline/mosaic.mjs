@@ -109,3 +109,46 @@ export async function renderMosaicForBounds(bounds,{size=2048,createCanvas=()=>d
     for(const bitmap of bitmaps.values())bitmap?.close?.();
   }
 }
+
+
+const routeDetailTileUrl=tile=>`/api/maps/offline?z=${tile.z}&x=${tile.x}&y=${tile.y}&size=256`;
+const txDone=tx=>new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||Error('No se pudo guardar la cartografía.'));});
+async function getRecord(db,store,key){return req(db.transaction(store,'readonly').objectStore(store).get(key));}
+async function putRecord(db,store,value){const tx=db.transaction(store,'readwrite');tx.objectStore(store).put(value);await txDone(tx);}
+
+export async function downloadRouteDetail(track,{signal,onProgress,fetcher=fetch}={}){
+  if(!track?.id||!Array.isArray(track.points)||track.points.length<2)throw Error('La ruta no contiene un trazado válido.');
+  const projected=track.points.map(p=>({x:R*p.lon*Math.PI/180,y:R*Math.log(Math.tan(Math.PI/4+p.lat*Math.PI/360))}));
+  let west=Infinity,east=-Infinity,south=Infinity,north=-Infinity;
+  for(const p of projected){west=Math.min(west,p.x);east=Math.max(east,p.x);south=Math.min(south,p.y);north=Math.max(north,p.y);}
+  const pad=1800,bounds=[west-pad,south-pad,east+pad,north+pad];
+  const tiles=[...tileRangeForMercatorBounds(bounds,14),...tileRangeForMercatorBounds(bounds,15)];
+  if(!tiles.length)throw Error('No se ha podido calcular el detalle de esta ruta.');
+  if(tiles.length>2500)throw Error('Esta ruta es demasiado extensa para descargar detalle 14–15 de una sola vez.');
+  const db=await openMosaic(),packId=`route-detail:${track.id}`,savedAt=new Date().toISOString();
+  let done=0,bytes=0;
+  try{
+    for(const tile of tiles){
+      if(signal?.aborted)throw Error('Descarga cancelada.');
+      let record=await getRecord(db,TILE_STORE,tile.key);
+      if(record?.blob?.size){
+        const packIds=[...new Set([...(record.packIds||[]),packId])];
+        if(packIds.length!==(record.packIds||[]).length)await putRecord(db,TILE_STORE,{...record,packIds});
+        bytes+=record.blob.size;
+      }else{
+        const response=await fetcher(routeDetailTileUrl(tile),{cache:'no-store',credentials:'same-origin',signal});
+        if(!response.ok||!response.headers.get('content-type')?.startsWith('image/'))throw Error(`No se ha podido descargar una parte del detalle (HTTP ${response.status||'desconocido'}).`);
+        const blob=await response.blob();
+        if(!blob.size||blob.size>1024*1024)throw Error('Una tesela del detalle no es válida.');
+        await putRecord(db,TILE_STORE,{...tile,blob,bytes:blob.size,packIds:[packId],savedAt});
+        bytes+=blob.size;
+      }
+      done++;
+      onProgress?.({completed:done,total:tiles.length,percentage:Math.round(done/tiles.length*100),bytes});
+    }
+    const pack={id:packId,name:`${track.name||'Ruta'} · detalle`,kind:'route-detail',bounds,minZoom:14,maxZoom:15,totalTiles:tiles.length,completedTiles:tiles.length,totalBytes:bytes,status:'ready',savedAt,tileKeys:tiles.map(t=>t.key)};
+    await putRecord(db,PACK_STORE,pack);
+    window.dispatchEvent(new CustomEvent('encumbrate:offline-mosaic',{detail:pack}));
+    return pack;
+  }finally{db.close();}
+}

@@ -1,5 +1,5 @@
 // Only anonymous, explicitly public application resources belong in CacheStorage.
-const CACHE_NAME = 'encumbrate-public-v17';
+const CACHE_NAME = 'encumbrate-public-v18';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icon-192-v2.jpg', '/icon-512-v2.jpg', '/apple-touch-icon-v2.jpg', '/offline.html', '/offline/viewer.mjs', '/offline/maps.mjs', '/offline/mosaic.mjs', '/offline/nav.mjs'];
 const MAX_ASSETS = 160;
 const ownedCache = name => /^encumbrate-(?:v\d+|public-v\d+)$/.test(name) || name === 'cumbre-v1';
