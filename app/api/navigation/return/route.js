@@ -45,7 +45,7 @@ export async function POST(request) {
     url.searchParams.set("alternatives", "false");
     url.searchParams.set("exclude", "ferry");
     url.searchParams.set("radiuses", "50;50");
-    url.searchParams.set("walkway_bias", "1");
+    url.searchParams.set("walkway_bias", "-1");
     url.searchParams.set("access_token", token);
     const response = await fetch(url, {
         signal: AbortSignal.timeout(12000),
@@ -64,9 +64,10 @@ export async function POST(request) {
       points,
       distanceM,
       provider: "Mapbox Walking",
+      routingProfile: "street-walking-v2",
       verified: false,
       warning:
-        "Ruta orientativa calculada sobre caminos cartografiados. Comprueba el terreno antes de avanzar.",
+        "Ruta peatonal priorizando calles y evitando atajos peatonales internos cuando exista alternativa. Comprueba el terreno antes de avanzar.",
     }), "POST, OPTIONS");
   } catch {
     return withOperationalCors(request, NextResponse.json(
