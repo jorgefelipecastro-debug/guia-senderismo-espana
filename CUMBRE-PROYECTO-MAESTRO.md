@@ -2,7 +2,15 @@
 
 > Documento vivo para conservar la visión, decisiones de producto y hoja de ruta de Encúmbrate fuera de cualquier conversación de ChatGPT.
 >
-> Estado: reconstrucción inicial basada en el código y documentación actualmente conservados en el repositorio. Las ideas que solo existían en la conversación perdida deben reincorporarse al validar este documento.
+> Estado: visión y decisiones históricas. Para las funciones y los datos realmente comprobados a 24 de septiembre de 2026, consulta [docs/ESTADO-2026-09-24.md](docs/ESTADO-2026-09-24.md). Las secciones antiguas sobre «MVP» y «pendiente» describen la fase inicial y no reflejan por sí solas el código actual.
+
+## Estado y decisión del 24-09-2026
+
+- Se recuperó el repositorio original a partir de la copia de seguridad del 22 de agosto. La rama principal consultada estaba en `3e9b8e2` (22-09-2026).
+- La API pública de rutas mostró el 24-09-2026 que la última importación de Alicante fue el 26-08-2026. La marca `updatedAt` anterior era la hora de la consulta, no la fecha real del catálogo.
+- Se aplicó a Supabase de producción la migración `20260924_keep_national_route_catalog_fresh.sql` para reactivar una importación recurrente, ya que la tarea anterior se desprogramaba al concluir la carga inicial. Hay que comprobar sus ejecuciones y fechas de las 52 provincias antes de declarar el catálogo actualizado.
+- La ficha de rutas y alojamientos debe distinguir la fecha de importación de la fecha de consulta. Los cierres, permisos y estado del sendero siguen sin verificación en tiempo real.
+- La previsión municipal AEMET devolvió un error el 24-09-2026; los avisos CAP sí respondieron en la comprobación puntual. La causa de la incidencia de previsión aún requiere diagnóstico de la credencial y los registros del servicio.
 
 ## 1. Visión
 

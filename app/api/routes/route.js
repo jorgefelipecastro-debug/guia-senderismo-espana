@@ -50,6 +50,7 @@ function storedRoute(row, position, databaseDistanceM = null) {
     imageAttribution: row.image_credit || '', imageLicense: row.image_license || '', imageSourceUrl: row.image_source_url || '', imageGallery: [],
     wikipedia: row.wikipedia || '', wikidata: row.wikidata || '', commonsCategory: row.commons_category || '',
     sourceName: row.operator_name || 'OpenStreetMap', sourceUrl: row.source_url, officialUrl: row.official_url || '',
+    catalogLastSeenAt: row.last_seen_at || null, sourceUpdatedAt: row.source_updated_at || null,
     metricsSource: row.distance_km !== null || row.ascent_m !== null ? 'Catálogo nacional auditado de Encúmbrate' : '',
     metricsSourceUrl: row.source_url, network: row.network || '', municipality: row.municipality || '',
     province: row.province, community: row.community, incompleteFields: row.incomplete_fields || [],
@@ -96,7 +97,7 @@ export async function GET(request) {
     const offset = Math.max(0, Number.parseInt(params.get('cursor') || '0', 10) || 0);
     const limit = Math.min(200, Math.max(3, Number.parseInt(params.get('limit') || '200', 10) || 200));
     const stored = await databaseRoutes({ position, place, scope: params.get('scope'), offset, limit, radius });
-    return NextResponse.json({ ...stored, position, searchLabel: geocoded?.label || '', attribution: 'Catálogo nacional Encúmbrate · © OpenStreetMap contributors', updatedAt: new Date().toISOString(), catalogSource: 'supabase' }, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } });
+    return NextResponse.json({ ...stored, position, searchLabel: geocoded?.label || '', attribution: 'Catálogo nacional Encúmbrate · © OpenStreetMap contributors', queriedAt: new Date().toISOString(), catalogUpdatedAt: stored.region?.last_completed_at || null, catalogSource: 'supabase' }, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } });
   } catch (error) {
     await recordServerError(error, { route: '/api/routes' });
     return NextResponse.json({ routes: [], position, attribution: 'Catálogo Encúmbrate temporalmente no disponible', error: 'No hemos podido consultar ahora el catálogo de rutas.' }, { status: 503 });

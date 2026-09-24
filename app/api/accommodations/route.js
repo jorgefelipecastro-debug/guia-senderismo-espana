@@ -57,9 +57,10 @@ export async function GET(request) {
       internet: Boolean(row.internet),
       fee: row.fee || "",
       sourceUrl: row.source_url,
+      catalogLastSeenAt: row.last_seen_at || null,
     }));
     return NextResponse.json(
-      { items, source: "Catálogo Encúmbrate · OpenStreetMap", updatedAt: new Date().toISOString() },
+      { items, source: "Catálogo Encúmbrate · OpenStreetMap", queriedAt: new Date().toISOString() },
       { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=86400" } },
     );
   } catch (error) {

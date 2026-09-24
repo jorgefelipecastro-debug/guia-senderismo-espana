@@ -1403,6 +1403,12 @@ button {
   color: #61766b;
   font-size: 10px !important;
 }
+.routeCatalogFreshness {
+  margin: 10px 16px;
+  color: #294737;
+  font-size: 13px;
+  line-height: 1.4;
+}
 .goldTrophy {
   position: absolute;
   right: -6px;

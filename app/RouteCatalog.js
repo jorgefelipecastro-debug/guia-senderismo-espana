@@ -12,6 +12,7 @@ import RoutePreparation from "./RoutePreparation";
 import Weather from "./Weather";
 import { readSettings } from "../lib/app-settings";
 import { operationalFetch } from "../lib/operational-api";
+import { catalogFreshness } from "../lib/catalog-freshness";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -316,6 +317,7 @@ export default function RouteCatalog() {
     [historyOpen, setHistoryOpen] = useState(false),
     [nextCursor, setNextCursor] = useState(null),
     [catalogTotal, setCatalogTotal] = useState(0),
+    [catalogUpdatedAt, setCatalogUpdatedAt] = useState(null),
     [activeSearch, setActiveSearch] = useState(null),
     [moreLoading, setMoreLoading] = useState(false),
     [mapOpen, setMapOpen] = useState(false);
@@ -352,6 +354,7 @@ export default function RouteCatalog() {
             );
             setNextCursor(body.nextCursor || null);
             setCatalogTotal(body.total || body.routes?.length || 0);
+            setCatalogUpdatedAt(body.catalogUpdatedAt || null);
             setActiveSearch({
               lat: String(position.lat),
               lon: String(position.lon),
@@ -370,6 +373,7 @@ export default function RouteCatalog() {
             } catch {}
             setRoutes(cached);
             setCatalogTotal(cached.length);
+            setCatalogUpdatedAt(null);
             setError(cached.length ? "" : err.message);
             setCatalogLabel(cached.length ? "rutas guardadas offline" : "");
             setLoading(false);
@@ -448,6 +452,7 @@ export default function RouteCatalog() {
       setRoutes(body.routes || []);
       setNextCursor(body.nextCursor || null);
       setCatalogTotal(body.total || body.routes?.length || 0);
+      setCatalogUpdatedAt(body.catalogUpdatedAt || null);
       setActiveSearch(search);
       setCatalogLabel(body.searchLabel || clean);
       setUsingLocation(false);
@@ -566,6 +571,7 @@ export default function RouteCatalog() {
           nextCursor={nextCursor}
           moreLoading={moreLoading}
           catalogTotal={catalogTotal}
+          catalogUpdatedAt={catalogUpdatedAt}
           placeLoading={placeLoading}
           placeError={placeError}
           catalogLabel={catalogLabel}
@@ -729,6 +735,7 @@ function RouteDirectory({
   nextCursor,
   moreLoading,
   catalogTotal,
+  catalogUpdatedAt,
   placeLoading,
   placeError,
   catalogLabel,
@@ -740,6 +747,7 @@ function RouteDirectory({
 }) {
   const [community, setCommunity] = useState(""),
     [province, setProvince] = useState("");
+  const catalogDate = catalogFreshness(catalogUpdatedAt);
   function chooseCommunity(event) {
     setCommunity(event.target.value);
     setProvince("");
@@ -855,6 +863,10 @@ function RouteDirectory({
         {catalogTotal > routes.length ? ` de ${catalogTotal}` : ""} rutas
         mostradas
       </p>
+      {catalogDate && <p className="routeCatalogFreshness">
+        Datos cartográficos de esta provincia importados el {catalogDate.date}.
+        {catalogDate.olderThan30Days && " Comprueba la fuente antes de salir: esta importación supera los 30 días."}
+      </p>}
       <div className="routeDirectoryList">
         {routes.map((route) => (
           <RouteCard
@@ -892,6 +904,7 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
   const photo = useRoutePhoto(route, true),
     profile = useRouteProfile(route, true),
     shown = enrichedRoute(route, profile);
+  const catalogDate = catalogFreshness(route.catalogLastSeenAt);
   return (
     <div className="routeScreen catalogRouteDetail">
       <div
@@ -950,6 +963,10 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
         {shown.metricsSource && (
           <p className="routeMetricsSource">Datos: {shown.metricsSource}</p>
         )}
+        {catalogDate && <p className="routeCatalogFreshness">
+          Ficha de OpenStreetMap consultada el {catalogDate.date}.
+          {catalogDate.olderThan30Days && " Estos datos tienen más de 30 días; consulta la fuente original."}
+        </p>}
         {photo.credit && (
           <p className="routePhotoCredit">
             {photo.trace ? "Trazado" : "Foto"}:{" "}
