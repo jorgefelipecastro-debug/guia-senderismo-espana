@@ -23,7 +23,7 @@ La aplicación Android tiene instrucciones propias en [mobile/README.md](mobile/
 
 ## Servicios conectados
 
-- Vercel sirve `www.encumbrate.es` y tiene las tareas de `vercel.json`. El endpoint público `/api/health` comprobó la conexión con Supabase el 24-09-2026, pero no identifica el commit desplegado (`release: local`).
+- Vercel sirve `www.encumbrate.es` y tiene las tareas de `vercel.json`. El panel filtrado por producción destacó `588776a` como despliegue `Production / Ready` el 24-09-2026; no se inspeccionó la asignación del dominio personalizado. El endpoint público `/api/health` comprobó la conexión con Supabase, pero aún no identifica el commit servido (`release: local`).
 - Railway figura en `lib/operational-api.js` como backend prioritario para llamadas operativas, con Vercel de respaldo. Su panel y el estado del servicio deben comprobarse con acceso a Railway; el código por sí solo no demuestra que esté activo.
 - Supabase almacena rutas, alojamientos y datos de usuario. La importación de rutas usa una tarea `pg_cron` y una clave que permanece exclusivamente en el servidor. El detalle de las comprobaciones de producción está en el [estado del proyecto](docs/ESTADO-2026-09-24.md).
 
