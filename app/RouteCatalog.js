@@ -13,6 +13,7 @@ import Weather from "./Weather";
 import { readSettings } from "../lib/app-settings";
 import { operationalFetch } from "../lib/operational-api";
 import { catalogFreshness } from "../lib/catalog-freshness";
+import { classifyHikingRoute } from "../lib/route-classification";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -34,6 +35,7 @@ const LEVEL_LABELS = {
   principiante: "Principiante",
   intermedio: "Intermedio",
   experto: "Experto",
+  sin_clasificar: "Sin clasificar",
 };
 const TERRITORIES = {
   Andalucía: [
@@ -299,10 +301,13 @@ function useRouteProfile(route, enabled = true) {
 }
 function enrichedRoute(route, profile) {
   if (!profile) return route;
+  const distanceKm = route.distanceKm ?? profile.distanceKm;
+  const ascentM = route.ascentM ?? profile.ascentM;
   return {
     ...route,
-    distanceKm: route.distanceKm ?? profile.distanceKm,
-    ascentM: route.ascentM ?? profile.ascentM,
+    distanceKm,
+    ascentM,
+    level: classifyHikingRoute(distanceKm, ascentM),
     maxAltitudeM: route.maxAltitudeM ?? profile.maxAltitudeM,
     minAltitudeM: route.minAltitudeM ?? profile.minAltitudeM,
     duration: route.duration || profile.duration,
@@ -1043,7 +1048,7 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
         </button>
         <button className="routeStayButton" onClick={() => window.dispatchEvent(new CustomEvent("encumbrate:open-accommodations", { detail: { lat: route.lat, lon: route.lon, label: route.name } }))}>⌂ Refugios y alojamientos cercanos</button>
         <RouteGallery photos={photo.gallery || []} routeName={route.name} />
-        <GpsRecorder route={route} previous={activity} onSaved={onSaved} />
+        <GpsRecorder route={shown} previous={activity} onSaved={onSaved} />
         {photo.trace && (
           <p className="routePhotoNotice">
             No existe todavía una fotografía pública inequívoca de esta ruta.
