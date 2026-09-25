@@ -1043,6 +1043,9 @@ button {
 .routeLevel-experto {
   background: #7144bb;
 }
+.routeLevel-sin_clasificar {
+  background: #465a50;
+}
 .routesState {
   min-height: 118px;
   margin-top: 15px;

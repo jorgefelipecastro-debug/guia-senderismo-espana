@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '../../../lib/supabase-admin';
 import { recordServerError } from '../../../lib/monitoring';
+import { classifyHikingRoute } from '../../../lib/route-classification';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_POSITION = { lat: 38.3452, lon: -0.4815 };
@@ -39,7 +40,8 @@ function durationLabel(minutes) {
 
 function storedRoute(row, position, databaseDistanceM = null) {
   return {
-    id: row.id, name: row.name, ref: row.route_ref || '', level: row.level,
+    id: row.id, name: row.name, ref: row.route_ref || '',
+    level: classifyHikingRoute(row.distance_km === null ? null : Number(row.distance_km), row.ascent_m),
     distanceKm: row.distance_km === null ? null : Number(row.distance_km),
     ascentM: row.ascent_m, maxAltitudeM: row.max_altitude_m, minAltitudeM: row.min_altitude_m,
     duration: durationLabel(row.duration_minutes), routeType: row.route_type || 'No publicado',
