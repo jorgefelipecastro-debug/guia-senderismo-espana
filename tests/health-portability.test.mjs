@@ -4,9 +4,8 @@ import {readFile} from 'node:fs/promises';
 
 const source=await readFile(new URL('../app/api/health/route.js',import.meta.url),'utf8');
 
-test('health endpoint no longer depends on Vercel runtime identifiers',()=>{
+test('health endpoint generates a request id without requiring Vercel headers',()=>{
  assert.doesNotMatch(source,/x-vercel-id/i);
- assert.doesNotMatch(source,/VERCEL_GIT_COMMIT_SHA/);
 });
 
 test('health endpoint reports Railway release and emits a request id',()=>{

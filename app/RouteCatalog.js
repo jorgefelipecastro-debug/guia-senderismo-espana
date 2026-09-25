@@ -12,6 +12,7 @@ import RoutePreparation from "./RoutePreparation";
 import Weather from "./Weather";
 import { readSettings } from "../lib/app-settings";
 import { operationalFetch } from "../lib/operational-api";
+import { catalogFreshness } from "../lib/catalog-freshness";
 import {
   bearingDegrees,
   nearestPolylinePoint,
@@ -263,25 +264,38 @@ function useRouteProfile(route, enabled = true) {
   const [profile, setProfile] = useState(
     () => routeProfileCache.get(route.id) || null,
   );
+  const [status, setStatus] = useState(complete || profile ? "ready" : "idle");
   useEffect(() => {
     let active = true;
     if (!enabled || complete || routeProfileCache.has(route.id))
       return () => {
         active = false;
       };
+    setStatus("loading");
     fetch(`/api/routes/profile?id=${encodeURIComponent(route.id)}`)
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data.found) return;
-        routeProfileCache.set(route.id, data);
-        if (active) setProfile(data);
+      .then((response) => {
+        if (!response.ok) throw new Error("Perfil no disponible");
+        return response.json();
       })
-      .catch(() => {});
+      .then((data) => {
+        if (!data.found) {
+          if (active) setStatus("unavailable");
+          return;
+        }
+        routeProfileCache.set(route.id, data);
+        if (active) {
+          setProfile(data);
+          setStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (active) setStatus("unavailable");
+      });
     return () => {
       active = false;
     };
   }, [route.id, enabled, complete]);
-  return profile;
+  return { profile, status };
 }
 function enrichedRoute(route, profile) {
   if (!profile) return route;
@@ -316,6 +330,7 @@ export default function RouteCatalog() {
     [historyOpen, setHistoryOpen] = useState(false),
     [nextCursor, setNextCursor] = useState(null),
     [catalogTotal, setCatalogTotal] = useState(0),
+    [catalogUpdatedAt, setCatalogUpdatedAt] = useState(null),
     [activeSearch, setActiveSearch] = useState(null),
     [moreLoading, setMoreLoading] = useState(false),
     [mapOpen, setMapOpen] = useState(false);
@@ -352,6 +367,7 @@ export default function RouteCatalog() {
             );
             setNextCursor(body.nextCursor || null);
             setCatalogTotal(body.total || body.routes?.length || 0);
+            setCatalogUpdatedAt(body.catalogUpdatedAt || null);
             setActiveSearch({
               lat: String(position.lat),
               lon: String(position.lon),
@@ -370,6 +386,7 @@ export default function RouteCatalog() {
             } catch {}
             setRoutes(cached);
             setCatalogTotal(cached.length);
+            setCatalogUpdatedAt(null);
             setError(cached.length ? "" : err.message);
             setCatalogLabel(cached.length ? "rutas guardadas offline" : "");
             setLoading(false);
@@ -448,6 +465,7 @@ export default function RouteCatalog() {
       setRoutes(body.routes || []);
       setNextCursor(body.nextCursor || null);
       setCatalogTotal(body.total || body.routes?.length || 0);
+      setCatalogUpdatedAt(body.catalogUpdatedAt || null);
       setActiveSearch(search);
       setCatalogLabel(body.searchLabel || clean);
       setUsingLocation(false);
@@ -566,6 +584,7 @@ export default function RouteCatalog() {
           nextCursor={nextCursor}
           moreLoading={moreLoading}
           catalogTotal={catalogTotal}
+          catalogUpdatedAt={catalogUpdatedAt}
           placeLoading={placeLoading}
           placeError={placeError}
           catalogLabel={catalogLabel}
@@ -624,7 +643,9 @@ function RouteCard({ route, onClick, activity }) {
   const cardRef = useRef(null),
     [visible, setVisible] = useState(false),
     photo = useRoutePhoto(route, visible),
-    profile = useRouteProfile(route, visible),
+    // Compute missing metrics when the person opens a route, rather than
+    // requesting hundreds of external profiles while scrolling the catalog.
+    { profile } = useRouteProfile(route, false),
     shown = enrichedRoute(route, profile);
   useEffect(() => {
     const node = cardRef.current;
@@ -707,8 +728,8 @@ function RouteCard({ route, onClick, activity }) {
           <span>↗ {value(shown.ascentM, " m")}</span>
           <span>△ {value(shown.maxAltitudeM, " m")}</span>
         </p>
-        {visible && !shown.distanceKm && (
-          <small className="routeMetricsLoading">Calculando ficha…</small>
+        {!Number.isFinite(shown.distanceKm) && (
+          <small className="routeMetricsLoading">Distancia sin publicar · revisa la ficha antes de salir</small>
         )}
       </div>
       <span className="routeChevron">›</span>
@@ -729,6 +750,7 @@ function RouteDirectory({
   nextCursor,
   moreLoading,
   catalogTotal,
+  catalogUpdatedAt,
   placeLoading,
   placeError,
   catalogLabel,
@@ -740,6 +762,7 @@ function RouteDirectory({
 }) {
   const [community, setCommunity] = useState(""),
     [province, setProvince] = useState("");
+  const catalogDate = catalogFreshness(catalogUpdatedAt);
   function chooseCommunity(event) {
     setCommunity(event.target.value);
     setProvince("");
@@ -855,6 +878,10 @@ function RouteDirectory({
         {catalogTotal > routes.length ? ` de ${catalogTotal}` : ""} rutas
         mostradas
       </p>
+      {catalogDate && <p className="routeCatalogFreshness">
+        Datos cartográficos de esta provincia importados el {catalogDate.date}.
+        {catalogDate.olderThan30Days && " Comprueba la fuente antes de salir: esta importación supera los 30 días."}
+      </p>}
       <div className="routeDirectoryList">
         {routes.map((route) => (
           <RouteCard
@@ -890,8 +917,12 @@ function RouteDirectory({
 
 function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
   const photo = useRoutePhoto(route, true),
-    profile = useRouteProfile(route, true),
+    { profile, status: profileStatus } = useRouteProfile(route, true),
     shown = enrichedRoute(route, profile);
+  const catalogDate = catalogFreshness(route.catalogLastSeenAt);
+  const incompleteMetrics = !Number.isFinite(shown.distanceKm) ||
+    !Number.isFinite(shown.ascentM) || !Number.isFinite(shown.maxAltitudeM) ||
+    !Number.isFinite(shown.minAltitudeM) || !shown.duration;
   return (
     <div className="routeScreen catalogRouteDetail">
       <div
@@ -943,13 +974,23 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
             <small>Altitud máx.</small>
           </div>
           <div>
-            <strong>{shown.duration || "Calculando…"}</strong>
+            <strong>{shown.duration || (profileStatus === "loading" ? "Calculando…" : "No publicado")}</strong>
             <small>Duración</small>
           </div>
         </div>
         {shown.metricsSource && (
           <p className="routeMetricsSource">Datos: {shown.metricsSource}</p>
         )}
+        {incompleteMetrics && (
+          <p className="routeAccessWarning" role="status">
+            Esta ficha tiene métricas sin publicar{profileStatus === "loading" ? "; estamos comprobando el trazado" : ""}.
+            Comprueba la distancia, el desnivel y el tiempo previsto en la fuente antes de salir.
+          </p>
+        )}
+        {catalogDate && <p className="routeCatalogFreshness">
+          Ficha de OpenStreetMap consultada el {catalogDate.date}.
+          {catalogDate.olderThan30Days && " Estos datos tienen más de 30 días; consulta la fuente original."}
+        </p>}
         {photo.credit && (
           <p className="routePhotoCredit">
             {photo.trace ? "Trazado" : "Foto"}:{" "}
@@ -1112,11 +1153,10 @@ function RouteAccess({ route }) {
           <a
             className="walkingOnlyButton"
             href={fallbackWalking}
-            onClick={() => armTracking()}
             target="_blank"
             rel="noopener noreferrer"
           >
-            Abrir ubicación aproximada en Google Maps
+            Ver el centro aproximado de la ruta en Google Maps
           </a>
         </>
       ) : data?.foundParking ? (

@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '../../../../../lib/supabase-admin';
 import { fetchRegionRoutes, normalizeNationalRoute, resolveRegionArea } from '../../../../../lib/national-routes';
+import { suspiciousRouteImport } from '../../../../../lib/route-import-safety';
 import { recordServerError } from '../../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
@@ -37,10 +38,18 @@ export async function POST(request) {
   const { data: run, error: runError } = await supabase.from('route_import_runs').insert({ region_code: region.code, status: 'running', started_at: startedAt }).select('id').single();
   if (runError) return NextResponse.json({ error: 'No se pudo crear la auditoría de importación.' }, { status: 500 });
   try {
+    const { data: previousRun, error: historyError } = await supabase.from('route_import_runs')
+      .select('upserted_count').eq('region_code', region.code).eq('status', 'completed')
+      .order('completed_at', { ascending: false }).limit(1).maybeSingle();
+    if (historyError) throw historyError;
     const areaId = await resolveRegionArea(region);
     if (!region.osm_area_id) await supabase.from('route_import_regions').update({ osm_area_id: areaId }).eq('code', region.code);
     const payload = await fetchRegionRoutes(areaId, region.code);
     const routes = (payload.elements || []).map(item => normalizeNationalRoute(item, region, startedAt)).filter(Boolean);
+    const previousCount = previousRun?.upserted_count ?? region.route_count;
+    if (suspiciousRouteImport(previousCount, routes.length)) {
+      throw new Error(`La fuente devolvió ${routes.length} rutas frente a ${previousCount} anteriores. Se conserva el catálogo hasta revisar la importación.`);
+    }
     await upsertBatches(supabase, 'hiking_routes', routes, 'source,source_type,external_id');
     await upsertBatches(supabase, 'hiking_route_regions', routes.map(route => ({ route_id: route.id, region_code: region.code, published: true, last_seen_at: startedAt })), 'route_id,region_code');
     const { data: summary, error: finishError } = await supabase.rpc('complete_route_import_region', {
