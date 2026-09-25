@@ -44,6 +44,17 @@ update public.hiking_routes h set
     else 'intermedio' end
 where h.source='openstreetmap';
 
+update public.route_import_regions r set incomplete_count=s.incomplete_count
+from (
+  select rr.region_code,
+    count(*) filter (where cardinality(h.incomplete_fields)>0)::integer as incomplete_count
+  from public.hiking_route_regions rr
+  join public.hiking_routes h on h.id=rr.route_id
+  where rr.published and h.published
+  group by rr.region_code
+) s
+where r.code=s.region_code;
+
 -- Keep the same rules on subsequent imports and profile enrichment.
 create or replace function public.preserve_hiking_route_metrics()
 returns trigger language plpgsql security invoker set search_path = '' as $$
