@@ -264,25 +264,38 @@ function useRouteProfile(route, enabled = true) {
   const [profile, setProfile] = useState(
     () => routeProfileCache.get(route.id) || null,
   );
+  const [status, setStatus] = useState(complete || profile ? "ready" : "idle");
   useEffect(() => {
     let active = true;
     if (!enabled || complete || routeProfileCache.has(route.id))
       return () => {
         active = false;
       };
+    setStatus("loading");
     fetch(`/api/routes/profile?id=${encodeURIComponent(route.id)}`)
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data.found) return;
-        routeProfileCache.set(route.id, data);
-        if (active) setProfile(data);
+      .then((response) => {
+        if (!response.ok) throw new Error("Perfil no disponible");
+        return response.json();
       })
-      .catch(() => {});
+      .then((data) => {
+        if (!data.found) {
+          if (active) setStatus("unavailable");
+          return;
+        }
+        routeProfileCache.set(route.id, data);
+        if (active) {
+          setProfile(data);
+          setStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (active) setStatus("unavailable");
+      });
     return () => {
       active = false;
     };
   }, [route.id, enabled, complete]);
-  return profile;
+  return { profile, status };
 }
 function enrichedRoute(route, profile) {
   if (!profile) return route;
@@ -630,7 +643,9 @@ function RouteCard({ route, onClick, activity }) {
   const cardRef = useRef(null),
     [visible, setVisible] = useState(false),
     photo = useRoutePhoto(route, visible),
-    profile = useRouteProfile(route, visible),
+    // Compute missing metrics when the person opens a route, rather than
+    // requesting hundreds of external profiles while scrolling the catalog.
+    { profile } = useRouteProfile(route, false),
     shown = enrichedRoute(route, profile);
   useEffect(() => {
     const node = cardRef.current;
@@ -713,8 +728,8 @@ function RouteCard({ route, onClick, activity }) {
           <span>↗ {value(shown.ascentM, " m")}</span>
           <span>△ {value(shown.maxAltitudeM, " m")}</span>
         </p>
-        {visible && !shown.distanceKm && (
-          <small className="routeMetricsLoading">Calculando ficha…</small>
+        {!Number.isFinite(shown.distanceKm) && (
+          <small className="routeMetricsLoading">Distancia sin publicar · revisa la ficha antes de salir</small>
         )}
       </div>
       <span className="routeChevron">›</span>
@@ -902,9 +917,12 @@ function RouteDirectory({
 
 function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
   const photo = useRoutePhoto(route, true),
-    profile = useRouteProfile(route, true),
+    { profile, status: profileStatus } = useRouteProfile(route, true),
     shown = enrichedRoute(route, profile);
   const catalogDate = catalogFreshness(route.catalogLastSeenAt);
+  const incompleteMetrics = !Number.isFinite(shown.distanceKm) ||
+    !Number.isFinite(shown.ascentM) || !Number.isFinite(shown.maxAltitudeM) ||
+    !Number.isFinite(shown.minAltitudeM) || !shown.duration;
   return (
     <div className="routeScreen catalogRouteDetail">
       <div
@@ -956,12 +974,18 @@ function RouteDetail({ route, activity, close, onSaved, onCreateMeetup }) {
             <small>Altitud máx.</small>
           </div>
           <div>
-            <strong>{shown.duration || "Calculando…"}</strong>
+            <strong>{shown.duration || (profileStatus === "loading" ? "Calculando…" : "No publicado")}</strong>
             <small>Duración</small>
           </div>
         </div>
         {shown.metricsSource && (
           <p className="routeMetricsSource">Datos: {shown.metricsSource}</p>
+        )}
+        {incompleteMetrics && (
+          <p className="routeAccessWarning" role="status">
+            Esta ficha tiene métricas sin publicar{profileStatus === "loading" ? "; estamos comprobando el trazado" : ""}.
+            Comprueba la distancia, el desnivel y el tiempo previsto en la fuente antes de salir.
+          </p>
         )}
         {catalogDate && <p className="routeCatalogFreshness">
           Ficha de OpenStreetMap consultada el {catalogDate.date}.
@@ -1129,11 +1153,10 @@ function RouteAccess({ route }) {
           <a
             className="walkingOnlyButton"
             href={fallbackWalking}
-            onClick={() => armTracking()}
             target="_blank"
             rel="noopener noreferrer"
           >
-            Abrir ubicación aproximada en Google Maps
+            Ver el centro aproximado de la ruta en Google Maps
           </a>
         </>
       ) : data?.foundParking ? (

@@ -51,7 +51,7 @@ function storedRoute(row, position, databaseDistanceM = null) {
     wikipedia: row.wikipedia || '', wikidata: row.wikidata || '', commonsCategory: row.commons_category || '',
     sourceName: row.operator_name || 'OpenStreetMap', sourceUrl: row.source_url, officialUrl: row.official_url || '',
     catalogLastSeenAt: row.last_seen_at || null, sourceUpdatedAt: row.source_updated_at || null,
-    metricsSource: row.distance_km !== null || row.ascent_m !== null ? 'Catálogo nacional auditado de Encúmbrate' : '',
+    metricsSource: row.distance_km !== null || row.ascent_m !== null ? 'Datos públicos del catálogo Encúmbrate' : '',
     metricsSourceUrl: row.source_url, network: row.network || '', municipality: row.municipality || '',
     province: row.province, community: row.community, incompleteFields: row.incomplete_fields || [],
   };
@@ -69,7 +69,8 @@ async function databaseRoutes({ position, place, scope, offset, limit, radius })
     if (regionError) throw regionError;
     const needle = normalized(place).replace(/[,\s]+espana$/, '').trim();
     region = (regions || []).find(item => normalized(item.province) === needle || normalized(item.community) === needle) || null;
-    if (!region || region.status !== 'ready') return { routes: [], total: 0, nextCursor: null, region };
+    // An interrupted refresh must not hide an already completed snapshot.
+    if (!region || !region.last_completed_at) return { routes: [], total: 0, nextCursor: null, region };
   }
   const { data, error } = await supabase.rpc('search_hiking_routes_postgis', {
     p_lat: position.lat, p_lon: position.lon, p_radius_m: radius,

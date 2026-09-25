@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { recordServerError } from '../../../../lib/monitoring';
+import { flattenSegments, resolveRouteGeometry } from '../../../../lib/route-geometry';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,21 +85,34 @@ function mapsDirections(destination, travelmode, origin) {
 
 export async function GET(request) {
   const params = request.nextUrl.searchParams;
-  const match = String(params.get('id') || '').match(/^osm-relation-(\d+)$/);
+  const id = String(params.get('id') || '');
+  const match = id.match(/^osm-relation-(\d+)$/);
+  const official = /^fedamon-[a-z0-9-]+$/.test(id);
   const lat = Number(params.get('lat')), lon = Number(params.get('lon'));
-  if (!match || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+  if ((!match && !official) || !Number.isFinite(lat) || !Number.isFinite(lon)) {
     return NextResponse.json({ error: 'Referencia de acceso no válida.' }, { status: 400 });
   }
 
   try {
-    const relationId = Number(match[1]);
-    const query = `[out:json][timeout:22];relation(${relationId});out geom;(nwr["amenity"~"^(parking|restaurant|bar|cafe|clinic|hospital|doctors|pharmacy|shelter)$"](around:8000,${lat},${lon});nwr["tourism"~"^(alpine_hut|wilderness_hut|hostel|camp_site|chalet|hotel|guest_house)$"](around:8000,${lat},${lon});nwr["shop"~"^(convenience|supermarket|outdoor|general)$"](around:8000,${lat},${lon}););out tags center 160;`;
+    const relationId = match ? Number(match[1]) : null;
+    // Official trails have their own IDs and often include a stored track.
+    // Resolve that track before searching for access points near its start.
+    const geometry = official ? await resolveRouteGeometry(id) : null;
+    if (official && !geometry?.segments?.length) {
+      return NextResponse.json({ error: 'La fuente oficial no publica un trazado con el que verificar el inicio de esta ruta.' }, { status: 503 });
+    }
+    const officialPoints = geometry ? flattenSegments(geometry.segments) : [];
+    if (official && !officialPoints.length) {
+      return NextResponse.json({ error: 'La fuente oficial no publica un inicio verificable para esta ruta.' }, { status: 503 });
+    }
+    const search = officialPoints[0] || { lat, lon };
+    const query = `[out:json][timeout:22];${relationId ? `relation(${relationId});out geom;` : ''}(nwr["amenity"~"^(parking|restaurant|bar|cafe|clinic|hospital|doctors|pharmacy|shelter)$"](around:8000,${search.lat},${search.lon});nwr["tourism"~"^(alpine_hut|wilderness_hut|hostel|camp_site|chalet|hotel|guest_house)$"](around:8000,${search.lat},${search.lon});nwr["shop"~"^(convenience|supermarket|outdoor|general)$"](around:8000,${search.lat},${search.lon}););out tags center 160;`;
     const data = await fetchOverpass(query);
-    const route = (data.elements || []).find(element => element.type === 'relation' && element.id === relationId);
-    const points = geometryPoints(route);
+    const route = relationId ? (data.elements || []).find(element => element.type === 'relation' && element.id === relationId) : null;
+    const points = official ? officialPoints : geometryPoints(route);
     if (!points.length) throw new Error('Route geometry unavailable');
 
-    const routeTags = route.tags || {};
+    const routeTags = route?.tags || {};
     const dogValue = String(routeTags.dog || routeTags['dog:access'] || '').toLowerCase();
     const petPolicy = dogValue === 'no'
       ? { status: 'no', label: 'No aconsejable con perro', detail: 'La ficha pública del trazado indica que no se admiten perros.' }
