@@ -1,4 +1,6 @@
-import { operationalApiUrl, operationalFetch } from './api.mjs';
+import { operationalFetch } from './api.mjs';
+import { routeCorridorTiles } from './route-tiles.mjs';
+import { trackKey } from './maps.mjs';
 const DB_NAME='encumbrate-offline-mosaic';
 const DB_VERSION=1;
 const TILE_STORE='tiles';
@@ -112,44 +114,81 @@ export async function renderMosaicForBounds(bounds,{size=2048,createCanvas=()=>d
 }
 
 
-const routeDetailTileUrl=tile=>operationalApiUrl(`/api/maps/offline?z=${tile.z}&x=${tile.x}&y=${tile.y}&size=256`);
 const txDone=tx=>new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||Error('No se pudo guardar la cartografía.'));});
 async function getRecord(db,store,key){return req(db.transaction(store,'readonly').objectStore(store).get(key));}
 async function putRecord(db,store,value){const tx=db.transaction(store,'readwrite');tx.objectStore(store).put(value);await txDone(tx);}
+export async function readRouteMapPack(id,geometryKey){
+  const db=await openMosaic();
+  try{
+    const packs=await Promise.all([`route-detail:${id}`,`route:${id}`].map(key=>getRecord(db,PACK_STORE,key)));
+    return packs.find(pack=>pack?.status==='ready'&&pack.geometryKey===geometryKey)||null;
+  }finally{db.close();}
+}
 
-export async function downloadRouteDetail(track,{signal,onProgress,fetcher=fetch}={}){
+export async function downloadRouteDetail(track,{signal,onProgress,fetcher=fetch,requestIntervalMs=160}={}){
   if(!track?.id||!Array.isArray(track.points)||track.points.length<2)throw Error('La ruta no contiene un trazado válido.');
   const projected=track.points.map(p=>({x:R*p.lon*Math.PI/180,y:R*Math.log(Math.tan(Math.PI/4+p.lat*Math.PI/360))}));
   let west=Infinity,east=-Infinity,south=Infinity,north=-Infinity;
   for(const p of projected){west=Math.min(west,p.x);east=Math.max(east,p.x);south=Math.min(south,p.y);north=Math.max(north,p.y);}
   const pad=1800,bounds=[west-pad,south-pad,east+pad,north+pad];
-  const tiles=[...tileRangeForMercatorBounds(bounds,14),...tileRangeForMercatorBounds(bounds,15)];
-  if(!tiles.length)throw Error('No se ha podido calcular el detalle de esta ruta.');
-  if(tiles.length>2500)throw Error('Esta ruta es demasiado extensa para descargar detalle 14–15 de una sola vez.');
+  const plan=routeCorridorTiles(track.points,{limit:900}),tiles=plan.tiles;
   const db=await openMosaic(),packId=`route-detail:${track.id}`,savedAt=new Date().toISOString();
-  let done=0,bytes=0;
-  try{
-    for(const tile of tiles){
+  const base={id:packId,name:`${track.name||'Ruta'} · detalle`,kind:'route-detail',bounds,geometryKey:trackKey(track),minZoom:plan.minZoom,maxZoom:plan.maxZoom,totalTiles:tiles.length,completedTiles:0,totalBytes:0,status:'downloading',savedAt,tileKeys:tiles.map(t=>t.key)};
+  let done=0,bytes=0,next=0,nextRequestAt=0,failed=null;
+  const wait=ms=>new Promise((resolve,reject)=>{
+    if(signal?.aborted)return reject(Error('Descarga cancelada.'));
+    const onAbort=()=>{clearTimeout(timer);reject(Error('Descarga cancelada.'));};
+    const timer=setTimeout(()=>{signal?.removeEventListener?.('abort',onAbort);resolve();},ms);
+    signal?.addEventListener?.('abort',onAbort,{once:true});
+  });
+  const fetchTile=async tile=>{
+    for(let attempt=0;attempt<4;attempt++){
+      const slot=Math.max(Date.now(),nextRequestAt);
+      nextRequestAt=slot+Math.max(0,requestIntervalMs);
+      if(slot>Date.now())await wait(slot-Date.now());
       if(signal?.aborted)throw Error('Descarga cancelada.');
-      let record=await getRecord(db,TILE_STORE,tile.key);
-      if(record?.blob?.size){
-        const packIds=[...new Set([...(record.packIds||[]),packId])];
-        if(packIds.length!==(record.packIds||[]).length)await putRecord(db,TILE_STORE,{...record,packIds});
-        bytes+=record.blob.size;
-      }else{
+      try{
         const response=await operationalFetch(`/api/maps/offline?z=${tile.z}&x=${tile.x}&y=${tile.y}&size=256`,{cache:'no-store',signal},fetcher);
-        if(!response.ok||!response.headers.get('content-type')?.startsWith('image/'))throw Error(`No se ha podido descargar una parte del detalle (HTTP ${response.status||'desconocido'}).`);
-        const blob=await response.blob();
-        if(!blob.size||blob.size>1024*1024)throw Error('Una tesela del detalle no es válida.');
-        await putRecord(db,TILE_STORE,{...tile,blob,bytes:blob.size,packIds:[packId],savedAt});
-        bytes+=blob.size;
-      }
-      done++;
-      onProgress?.({completed:done,total:tiles.length,percentage:Math.round(done/tiles.length*100),bytes});
+        if(response.ok&&response.headers.get('content-type')?.startsWith('image/')){
+          const blob=await response.blob();
+          if(blob.size>0&&blob.size<=1024*1024)return blob;
+        }
+        if(response.status!==429&&response.status<500)throw Object.assign(Error(`No se pudo descargar una tesela (HTTP ${response.status}).`),{fatal:true});
+      }catch(error){if(signal?.aborted||error.fatal||attempt===3)throw error;}
+      if(attempt===3)throw Error('El servidor cartográfico no responde. Reintenta la descarga.');
+      await wait(Math.min(8000,800*2**attempt));
     }
-    const pack={id:packId,name:`${track.name||'Ruta'} · detalle`,kind:'route-detail',bounds,minZoom:14,maxZoom:15,totalTiles:tiles.length,completedTiles:tiles.length,totalBytes:bytes,status:'ready',savedAt,tileKeys:tiles.map(t=>t.key)};
+  };
+  const worker=async()=>{
+    while(!failed){
+      const tile=tiles[next++];if(!tile)return;
+      try{
+        if(signal?.aborted)throw Error('Descarga cancelada.');
+        let record=await getRecord(db,TILE_STORE,tile.key);
+        if(record?.blob?.size){
+          const packIds=[...new Set([...(record.packIds||[]),packId])];
+          if(packIds.length!==(record.packIds||[]).length)await putRecord(db,TILE_STORE,{...record,packIds});
+          bytes+=record.blob.size;
+        }else{
+          const blob=await fetchTile(tile);
+          await putRecord(db,TILE_STORE,{...tile,blob,bytes:blob.size,packIds:[packId],savedAt});
+          bytes+=blob.size;
+        }
+        done++;onProgress?.({completed:done,total:tiles.length,percentage:Math.round(done/tiles.length*100),bytes});
+        if(done%10===0)await putRecord(db,PACK_STORE,{...base,completedTiles:done,totalBytes:bytes});
+      }catch(error){failed=error;}
+    }
+  };
+  try{
+    await putRecord(db,PACK_STORE,base);
+    await Promise.all(Array.from({length:Math.min(4,tiles.length)},worker));
+    if(failed)throw failed;
+    const pack={...base,completedTiles:done,totalBytes:bytes,status:'ready'};
     await putRecord(db,PACK_STORE,pack);
-    window.dispatchEvent(new CustomEvent('encumbrate:offline-mosaic',{detail:pack}));
+    if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('encumbrate:offline-mosaic',{detail:pack}));
     return pack;
+  }catch(error){
+    await putRecord(db,PACK_STORE,{...base,completedTiles:done,totalBytes:bytes,status:'partial'}).catch(()=>{});
+    throw error;
   }finally{db.close();}
 }

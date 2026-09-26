@@ -32,7 +32,7 @@ test('las APIs operativas permiten CORS limitado y no wildcard',async()=>{
 
 test('el modo offline cachea el cliente actualizado',async()=>{
   const worker=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-  assert.match(worker,/encumbrate-public-v28/);
+  assert.match(worker,/encumbrate-public-v29/);
   assert.match(worker,/\/offline\/api\.mjs/);
 });
 

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import './route-preparation.css';
 import {downloadRouteOfflinePack,getOfflinePack} from '../lib/offline-mosaic';
+import {liveMapTrackKey} from '../lib/live-offline-map';
 import {operationalFetch} from '../lib/operational-api';
 
 const ACCESS_PROFILE='street-walking-v2';
@@ -18,8 +19,9 @@ export default function RoutePreparation({ route, download, readSaved }) {
   const [accessError, setAccessError] = useState('');
   useEffect(() => {
     const sync = () => {
-      setSaved(readSaved(route.id));
-      getOfflinePack(`route:${route.id}`).then(setMapPack).catch(()=>{});
+      const stored=readSaved(route.id);
+      setSaved(stored);
+      getOfflinePack(`route:${route.id}`).then(pack=>setMapPack(pack?.geometryKey===liveMapTrackKey(stored)?pack:null)).catch(()=>{});
       try {
         const access=JSON.parse(localStorage.getItem(`encumbrate:offline-access:${route.id}`)||'null');
         setAccessReady(Boolean(access?.points?.length>1&&access?.routingProfile===ACCESS_PROFILE));
@@ -82,10 +84,14 @@ export default function RoutePreparation({ route, download, readSaved }) {
     } finally { setAccessBusy(false); }
   }
   async function saveDetailedMap() {
-    const track=await download(route);
-    setSaved(track);setMapBusy(true);setMapProgress(0);setError('');
-    try { const pack=await downloadRouteOfflinePack({...track,name:route.name},{onProgress:p=>setMapProgress(p.percentage)}); setMapPack(pack); }
-    catch { setError('No se ha podido descargar el mapa detallado. Comprueba la conexión y el espacio disponible.'); }
+    setMapBusy(true);setMapProgress(0);setError('');
+    try {
+      const track=await download(route);
+      setSaved(track);
+      const pack=await downloadRouteOfflinePack({...track,name:route.name},{onProgress:p=>setMapProgress(p.percentage)});
+      setMapPack(pack);
+    }
+    catch (reason) { setError(reason?.message||'No se ha podido descargar el mapa detallado. Comprueba la conexión y el espacio disponible.'); }
     finally { setMapBusy(false); }
   }
   async function saveTrack() {
@@ -105,8 +111,8 @@ export default function RoutePreparation({ route, download, readSaved }) {
       <button type="button" onClick={saveTrack} disabled={busy}>{busy ? 'Guardando trazado…' : saved ? 'Actualizar trazado' : 'Guardar trazado para la salida'}</button>
       {error && <p role="alert">{error}</p>}
       {saved && <p><a href={`/offline.html?route=${encodeURIComponent(route.id)}`} target="_blank" rel="noopener">Abrir comprobación offline ↗</a></p>}
-      <button type="button" onClick={saveDetailedMap} disabled={mapBusy}>{mapPack?.status==='ready'?'Actualizar mapa detallado':mapBusy?`Descargando mapa… ${mapProgress}%`:'Descargar mapa detallado de esta ruta'}</button>
-      {mapPack?.status==='ready' && <small>✓ Cartografía de ruta disponible offline · zoom 10–15.</small>}
+      <button type="button" onClick={saveDetailedMap} disabled={mapBusy}>{mapBusy?`Descargando mapa… ${mapProgress}%`:mapPack?.status==='ready'?'Actualizar mapa detallado':'Descargar mapa detallado de esta ruta'}</button>
+      {mapPack?.status==='ready' && <small>✓ Cartografía de toda la ruta disponible offline · hasta zoom {mapPack.maxZoom}.</small>}
       <button type="button" onClick={prepareAccess} disabled={accessBusy}>{accessBusy?'Calculando acceso peatonal…':accessReady?'Actualizar acceso offline al inicio':'Preparar acceso offline al inicio'}</button>
       {accessReady && <small>✓ Acceso peatonal guardado desde tu posición actual. Si sales desde otro lugar, vuelve a prepararlo.</small>}
       {accessError && <small role="alert">{accessError}</small>}

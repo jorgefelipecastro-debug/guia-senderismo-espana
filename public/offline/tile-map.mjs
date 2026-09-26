@@ -150,14 +150,14 @@ export async function createOfflineGpsMap({container,track,onFollowChange}){
     const hit=await readBest(db,zoom,tileX,tileY,tileCache);
     if(destroyed||token!==renderId)return;
     const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#e8ede5';ctx.fillRect(0,0,TILE,TILE);
-    if(!hit){canvas.dataset.missing='1';return;}
+    if(!hit){canvas.dataset.missing='1';canvas.dataset.ready='1';return;}
     try{
       const image=await bitmapFor(hit.record);
       if(destroyed||token!==renderId)return;
       const crop=TILE/hit.factor,sx=hit.subX*crop,sy=hit.subY*crop;
       ctx.drawImage(image,sx,sy,crop,crop,0,0,TILE,TILE);
-      canvas.dataset.missing='0';
-    }catch{canvas.dataset.missing='1';}
+      canvas.dataset.missing='0';canvas.dataset.ready='1';
+    }catch{canvas.dataset.missing='1';canvas.dataset.ready='1';}
   }
   function renderTiles(){
     const token=++renderId,o=origin(),n=2**zoom;
@@ -171,6 +171,9 @@ export async function createOfflineGpsMap({container,track,onFollowChange}){
       if(!canvas){
         canvas=document.createElement('canvas');canvas.width=TILE;canvas.height=TILE;canvas.className='gpsTile';canvas.dataset.key=k;
         tiles.set(k,canvas);tileLayer.append(canvas);
+      }
+      if(canvas.dataset.ready!=='1'&&canvas.dataset.drawingToken!==String(token)){
+        canvas.dataset.drawingToken=String(token);
         void drawTile(canvas,x,y,token);
       }
       canvas.style.transform=`translate3d(${Math.round(x*TILE-o.x)}px,${Math.round(y*TILE-o.y)}px,0)`;
@@ -181,6 +184,13 @@ export async function createOfflineGpsMap({container,track,onFollowChange}){
   }
   let frame=0;
   function render(){if(frame)return;frame=requestAnimationFrame(()=>{frame=0;renderTiles();});}
+  function refreshTiles(){
+    tileCache.clear();
+    for(const canvas of tiles.values())canvas.remove();
+    tiles.clear();
+    for(const promise of bitmapCache.values())promise?.then?.(image=>image.close?.()).catch(()=>{});
+    bitmapCache.clear();render();
+  }
   function setCenter(next,{user=false}={}){
     center={lat:clamp(Number(next.lat),-85,85),lon:clamp(Number(next.lon),-180,180)};
     if(user&&follow){follow=false;onFollowChange?.(false);}
@@ -241,15 +251,16 @@ export async function createOfflineGpsMap({container,track,onFollowChange}){
   container.addEventListener('wheel',wheel,{passive:false});
   container.addEventListener('dblclick',event=>{const rect=container.getBoundingClientRect();setZoom(zoom+1,{x:event.clientX-rect.left,y:event.clientY-rect.top});});
   const resize=()=>render();window.addEventListener('resize',resize);
+  window.addEventListener('encumbrate:offline-mosaic',refreshTiles);
 
   fitTrack();
   return{
-    setPosition,setGuide,fitTrack,fitPoints,recenter,
+    setPosition,setGuide,fitTrack,fitPoints,recenter,refreshTiles,
     zoomIn(){setZoom(zoom+1);},zoomOut(){setZoom(zoom-1);},
     getZoom(){return zoom;},isFollowing(){return follow;},
     setFollow(value){follow=Boolean(value);onFollowChange?.(follow);},
     destroy(){
-      destroyed=true;window.removeEventListener('resize',resize);container.removeEventListener('pointerdown',pointerDown);container.removeEventListener('pointermove',pointerMove);container.removeEventListener('pointerup',pointerUp);container.removeEventListener('pointercancel',pointerUp);container.removeEventListener('wheel',wheel);
+      destroyed=true;window.removeEventListener('resize',resize);window.removeEventListener('encumbrate:offline-mosaic',refreshTiles);container.removeEventListener('pointerdown',pointerDown);container.removeEventListener('pointermove',pointerMove);container.removeEventListener('pointerup',pointerUp);container.removeEventListener('pointercancel',pointerUp);container.removeEventListener('wheel',wheel);
       if(frame)cancelAnimationFrame(frame);for(const promise of bitmapCache.values())promise?.then?.(image=>image.close?.()).catch(()=>{});db.close();container.innerHTML='';
     }
   };
