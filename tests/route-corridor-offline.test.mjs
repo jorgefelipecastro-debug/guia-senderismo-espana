@@ -41,3 +41,18 @@ test('la app y el visor offline comparten las teselas descargadas y confirman la
   assert.equal((await readRouteMapPack(track.id,trackKey(track))).status,'ready');
   assert.equal(await readRouteMapPack(track.id,'otro-trazado'),null);
 });
+
+test('el visor descarga su corredor directamente y lo recupera sin conexión',async()=>{
+  const track={id:'viewer-only-corridor',name:'Sendero',points:[{lat:39,lon:-1},{lat:39.005,lon:-.995}]};
+  let requests=0;
+  const fetcher=async()=>{
+    requests++;
+    return new Response(new Blob(['tesela'],{type:'image/jpeg'}),{status:200,headers:{'content-type':'image/jpeg'}});
+  };
+  const pack=await downloadRouteDetail(track,{fetcher,requestIntervalMs:0});
+  assert.equal(pack.status,'ready');
+  assert.ok(requests>0);
+  const [z,x,y]=tileAt(track.points.at(-1),pack.maxZoom).split('/').map(Number);
+  assert.ok(await readBestOfflineTile(z,x,y));
+  assert.equal((await readRouteMapPack(track.id,trackKey(track))).completedTiles,pack.totalTiles);
+});

@@ -111,7 +111,7 @@ export default function RoutePreparation({ route, download, readSaved }) {
       <button type="button" onClick={saveTrack} disabled={busy}>{busy ? 'Guardando trazado…' : saved ? 'Actualizar trazado' : 'Guardar trazado para la salida'}</button>
       {error && <p role="alert">{error}</p>}
       {saved && <p><a href={`/offline.html?route=${encodeURIComponent(route.id)}`} target="_blank" rel="noopener">Abrir comprobación offline ↗</a></p>}
-      <button type="button" onClick={saveDetailedMap} disabled={mapBusy}>{mapPack?.status==='ready'?'Actualizar mapa detallado':mapBusy?`Descargando mapa… ${mapProgress}%`:'Descargar mapa detallado de esta ruta'}</button>
+      <button type="button" onClick={saveDetailedMap} disabled={mapBusy}>{mapBusy?`Descargando mapa… ${mapProgress}%`:mapPack?.status==='ready'?'Actualizar mapa detallado':'Descargar mapa detallado de esta ruta'}</button>
       {mapPack?.status==='ready' && <small>✓ Cartografía de toda la ruta disponible offline · hasta zoom {mapPack.maxZoom}.</small>}
       <button type="button" onClick={prepareAccess} disabled={accessBusy}>{accessBusy?'Calculando acceso peatonal…':accessReady?'Actualizar acceso offline al inicio':'Preparar acceso offline al inicio'}</button>
       {accessReady && <small>✓ Acceso peatonal guardado desde tu posición actual. Si sales desde otro lugar, vuelve a prepararlo.</small>}
