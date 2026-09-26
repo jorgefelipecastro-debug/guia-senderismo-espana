@@ -62,6 +62,15 @@ test('a gap or ambiguous branching cannot be flattened into a false path', () =>
   assert.equal(navigableSegments([[a, { lat: 38.25, lon: -0.5 }]]), null);
 });
 
+test('sampling keeps real intermediate points when a sparse download would jump kilometres', () => {
+  const original = Array.from({ length: 11 }, (_, index) => ({ lat: 38, lon: -0.5 + index * 0.005 }));
+  const sampled = navigableSegments([original], 2);
+  assert.ok(sampled[0].length > 2);
+  assert.ok(sampled[0].every((point, index) => index === 0 || routeDistanceKm([[sampled[0][index - 1], point]]) <= 2));
+  assert.deepEqual(sampled[0][0], original[0]);
+  assert.deepEqual(sampled[0].at(-1), original.at(-1));
+});
+
 test('source failures do not classify unverified routes as missing', async () => {
   await assert.rejects(fetchRelationTracks([99], async () => ({ok:false,status:503})), /Overpass 503/);
 });

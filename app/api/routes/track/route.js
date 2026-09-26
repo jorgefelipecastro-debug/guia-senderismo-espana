@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
-import { simplifyTrack } from "../../../../lib/navigation-geometry";
 import { operationalOptions, withOperationalCors } from "../../../../lib/operational-cors.js";
 import { flattenSegments, resolveRouteGeometry, routeDistanceKm } from "../../../../lib/route-geometry";
 
 export const dynamic = "force-dynamic";
-
-function sample(points, max = 2000) {
-  return simplifyTrack(points, max);
-}
 
 export async function GET(request) {
   const raw = request.nextUrl.searchParams.get("id") || "";
@@ -31,8 +26,8 @@ export async function GET(request) {
       ), "GET, OPTIONS");
     return withOperationalCors(request, NextResponse.json(
       {
-        points: sample(points),
-        segments: geometry.segments.map(segment => sample(segment, 1200)).filter(segment => segment.length > 1),
+        points,
+        segments: geometry.segments,
         distanceKm: routeDistanceKm(geometry.segments),
         source: geometry.source,
         official: geometry.official,
