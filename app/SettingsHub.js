@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SETTINGS_KEY, DEFAULT_SETTINGS, readSettings, applySettings } from '../lib/app-settings';
 import OfflineMapManager from './OfflineMapManager';
+import { isContinuousOfflineTrack } from '../lib/offline-track-validation';
 
 const PREFIX = 'encumbrate:offline-route:';
 export default function SettingsHub({ close }) {
@@ -18,7 +19,7 @@ export default function SettingsHub({ close }) {
         if (!key?.startsWith(PREFIX) && key !== 'encumbrate:offline-route') continue;
         try {
           const raw=localStorage.getItem(key), item=JSON.parse(raw);
-          if (item?.id && Array.isArray(item.points) && item.points.length>1) found.push({key,id:item.id,name:item.name||'Ruta guardada',bytes:new Blob([raw]).size});
+          if (item?.id && Array.isArray(item.points) && item.points.length>1) found.push({key,id:item.id,name:item.name||'Ruta guardada',bytes:new Blob([raw]).size,valid:isContinuousOfflineTrack(item)});
         } catch { /* Ignore invalid entries without modifying them. */ }
       }
       setDownloads(found);
@@ -53,7 +54,7 @@ export default function SettingsHub({ close }) {
       refreshDownloads(); window.dispatchEvent(new Event('encumbrate:route-offline')); setMessage('Trazado descargado eliminado. El historial y el registro GPS se conservan.');
     } catch { setMessage('No se ha podido eliminar el trazado.'); }
   }
-  const unique=downloads.filter((item,index)=>downloads.findIndex(other=>other.id===item.id)===index);
+  const unique=[...downloads].sort((a,b)=>Number(b.valid)-Number(a.valid)).filter((item,index,list)=>list.findIndex(other=>other.id===item.id)===index);
   return <dialog ref={dialog} className="settingsHub" aria-labelledby="settings-title" onCancel={event=>{event.preventDefault();close();}}>
     <header><button type="button" onClick={close} autoFocus>‹ Volver a Encúmbrate</button><h1 id="settings-title">Configuración</h1><p>A tu manera, en este dispositivo.</p></header>
     <div className="settingsContent">
@@ -73,7 +74,7 @@ export default function SettingsHub({ close }) {
         <div className="offlineTrackSection">
           <h3>Trazados guardados</h3>
           <p>{unique.length} trazados · {(downloads.reduce((total,item)=>total+item.bytes,0)/1024).toLocaleString('es-ES',{maximumFractionDigits:1})} KB adicionales.</p>
-          {unique.length ? unique.map(item=><div className="settingsDownload" key={item.id}><strong>{item.name}</strong><button type="button" onClick={()=>remove(item)}>Eliminar trazado</button></div>) : <p>No hay trazados guardados en este navegador.</p>}
+          {unique.length ? unique.map(item=><div className="settingsDownload" key={item.id}><strong>{item.name}{!item.valid&&<small> · Descarga de nuevo esta ruta para navegar</small>}</strong><button type="button" onClick={()=>remove(item)}>Eliminar trazado</button></div>) : <p>No hay trazados guardados en este navegador.</p>}
         </div>
       </details>
       <details><summary>Permisos del dispositivo</summary>

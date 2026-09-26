@@ -1,4 +1,4 @@
-import {validTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
+import {validNavigationTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
 import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
 import {accessPathState,bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
@@ -10,7 +10,7 @@ try {
   for(let i=0;i<localStorage.length;i++) {
     const key=localStorage.key(i);
     if(!key.startsWith('encumbrate:offline-route:') && key!=='encumbrate:offline-route') continue;
-    try {const item=JSON.parse(localStorage.getItem(key));if(validTrack(item)&&!tracks.some(t=>t.id===item.id))tracks.push(item);}catch{}
+    try {const item=JSON.parse(localStorage.getItem(key));if(validNavigationTrack(item)&&!tracks.some(t=>t.id===item.id))tracks.push(item);}catch{}
   }
 }catch {$('empty').textContent='El almacenamiento no está disponible. Abre la aplicación fuera del modo privado.';}
 for(const t of tracks){const option=document.createElement('option');option.value=t.id;option.textContent=t.name || 'Ruta guardada';$('routes').append(option);}
@@ -189,7 +189,7 @@ async function refreshTrackIfOnline(current){
   try{
     const response=await operationalFetch('/api/routes/track?id='+encodeURIComponent(current.id),{cache:'no-store'});
     const body=await response.json();
-    if(!response.ok||!Array.isArray(body.points)||body.points.length<2)return current;
+    if(!response.ok||!validNavigationTrack({...body,id:current.id}))return current;
     const next={...current,points:body.points,segments:Array.isArray(body.segments)?body.segments:undefined,source:body.source,official:Boolean(body.official),geometryVersion:body.geometryVersion||'legacy',distanceKm:body.distanceKm,savedAt:new Date().toISOString()};
     localStorage.setItem('encumbrate:offline-route:'+current.id,JSON.stringify(next));
     const index=tracks.findIndex(item=>item.id===current.id);if(index>=0)tracks[index]=next;

@@ -25,6 +25,13 @@ export function boundsContainPoint(bounds,point,marginRatio=0){
 export function validTrack(track) {
   return track && typeof track.id === 'string' && Array.isArray(track.points) && track.points.length >= 2 && track.points.length <= 20000 && track.points.every(p => Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.lat >= 27 && p.lat <= 45 && p.lon >= -19 && p.lon <= 5);
 }
+export function validNavigationTrack(track) {
+  if (!validTrack(track) || !Array.isArray(track.segments) || track.segments.length !== 1) return false;
+  const line=track.segments[0];
+  if (!Array.isArray(line) || line.length<2) return false;
+  const same=(a,b)=>Number.isFinite(a?.lat)&&Number.isFinite(a?.lon)&&a.lat===b?.lat&&a.lon===b?.lon;
+  return same(track.points[0],line[0])&&same(track.points.at(-1),line.at(-1));
+}
 export function trackKey(track) {
   let hash = 2166136261;
   for (const char of JSON.stringify(track.points)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);

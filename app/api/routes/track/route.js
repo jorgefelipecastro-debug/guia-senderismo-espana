@@ -36,7 +36,7 @@ export async function GET(request) {
         distanceKm: routeDistanceKm(geometry.segments),
         source: geometry.source,
         official: geometry.official,
-        geometryVersion: "segments-v2",
+        geometryVersion: "continuous-v3",
       },
       {
         headers: {

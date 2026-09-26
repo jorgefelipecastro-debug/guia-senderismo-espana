@@ -30,9 +30,9 @@ test('las APIs operativas permiten CORS limitado y no wildcard',async()=>{
   assert.doesNotMatch(cors,/Access-Control-Allow-Origin[^\n]*\*/);
 });
 
-test('el modo offline cachea el cliente Railway v27',async()=>{
+test('el modo offline cachea el cliente actualizado',async()=>{
   const worker=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-  assert.match(worker,/encumbrate-public-v27/);
+  assert.match(worker,/encumbrate-public-v28/);
   assert.match(worker,/\/offline\/api\.mjs/);
 });
 
@@ -58,6 +58,15 @@ test('operationalFetch cae a Vercel cuando Railway responde 503',async()=>{
   assert.equal(calls.length,2);
   assert.match(calls[0].url,/railway\.app\/api\/navigation\/return/);
   assert.equal(calls[1].url,'/api/navigation/return');
+});
+
+test('la descarga GPS consulta directamente el catálogo verificado',async()=>{
+  const {operationalFetch}=await import('../lib/operational-api.js');
+  const calls=[];
+  await operationalFetch('/api/routes/track?id=prueba',{},async(url)=>{
+    calls.push(String(url));return new Response('{}',{status:200});
+  });
+  assert.deepEqual(calls,['/api/routes/track?id=prueba']);
 });
 
 test('routing peatonal acepta CORS operativo y OPTIONS',async()=>{

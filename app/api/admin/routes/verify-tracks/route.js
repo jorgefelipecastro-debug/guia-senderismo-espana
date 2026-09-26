@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '../../../../../lib/supabase-admin';
 import { fetchRelationTracks } from '../../../../../lib/route-geometry-import';
+import { navigableSegments } from '../../../../../lib/route-geometry';
 import { recordServerError } from '../../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,26 @@ export async function POST(request) {
   const expected = Buffer.from(String(control?.import_key || ''));
   if (authError || !control?.enabled || !supplied.length || supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
     return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
+
+  // Reassess cached tracks before accepting any more routes. Earlier imports
+  // could contain unordered or disconnected relation members; this pass uses
+  // only their saved geometry and never calls an external map provider.
+  const { data: pending, error: pendingError } = await supabase.from('hiking_route_tracks')
+    .select('route_id,segments').eq('status', 'ready').eq('continuity_checked', false)
+    .order('route_id').limit(100);
+  if (pendingError) return NextResponse.json({ error: 'No se pudieron revisar los trazados guardados.' }, { status: 500 });
+  if (pending?.length) {
+    let ready = 0, missing = 0;
+    for (const track of pending) {
+      const segments = navigableSegments(track.segments);
+      const { error } = await supabase.rpc('reconcile_ready_route_geometry', {
+        p_route_id: track.route_id, p_segments: segments,
+      });
+      if (error) return NextResponse.json({ error: 'No se pudo terminar la revisión del trazado guardado.' }, { status: 503 });
+      if (segments) ready++; else missing++;
+    }
+    return NextResponse.json({ done: false, reconciled: pending.length, ready, missing });
+  }
 
   const { data: routes, error: claimError } = await supabase.rpc('claim_route_geometry_batch', { p_limit: 12 });
   if (claimError) return NextResponse.json({ error: 'No se pudo reservar el lote de trazados.' }, { status: 500 });
