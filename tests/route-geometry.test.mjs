@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { continuousRouteLine, flattenSegments, navigableSegments, relationSegments, routeDistanceKm, sampleSegments } from '../lib/route-geometry.js';
-import { fetchRelationTracks } from '../lib/route-geometry-import.js';
+import { fetchRelationTracks, fetchRelationTrackBatches } from '../lib/route-geometry-import.js';
 
 test('reconstructs relation ways from the official OpenStreetMap full response', () => {
   const data = { elements: [
@@ -73,6 +73,25 @@ test('sampling keeps real intermediate points when a sparse download would jump 
 
 test('source failures do not classify unverified routes as missing', async () => {
   await assert.rejects(fetchRelationTracks([99], async () => ({ok:false,status:503})), /Overpass 503/);
+});
+
+test('a failed geometry subgroup leaves only those routes pending for retry', async () => {
+  const ids = Array.from({ length: 12 }, (_, index) => index + 100);
+  const groups = [];
+  const result = await fetchRelationTrackBatches(ids, async (_endpoint, options) => {
+    const query = new URLSearchParams(options.body).get('data');
+    groups.push(query);
+    if (query.includes('106,107,108,109,110,111')) return {ok:false,status:504};
+    return {ok:true,json:async()=>({elements:[{
+      type:'relation',id:100,members:[{type:'way',ref:1,geometry:[{lat:38,lon:-0.5},{lat:38.01,lon:-0.49}]}],
+    }]})};
+  });
+  assert.equal(groups.length, 3); // successful half plus two provider attempts for the failed half
+  assert.ok(groups.every(query => !query.includes('100,101,102,103,104,105,106')));
+  assert.equal(result.tracks.get('100').length, 1);
+  assert.equal(result.tracks.get('101'), null); // present response, but no geometry
+  assert.deepEqual(result.failedIds, ['106','107','108','109','110','111']);
+  assert.equal(result.errors.length, 1);
 });
 
 test('runtime route endpoints contain no Overpass dependency', () => {
