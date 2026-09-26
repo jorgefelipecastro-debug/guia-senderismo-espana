@@ -86,12 +86,25 @@ test('a failed geometry subgroup leaves only those routes pending for retry', as
       type:'relation',id:100,members:[{type:'way',ref:1,geometry:[{lat:38,lon:-0.5},{lat:38.01,lon:-0.49}]}],
     }]})};
   });
-  assert.equal(groups.length, 3); // successful half plus two provider attempts for the failed half
+  assert.equal(groups.length, 4); // successful half plus three provider attempts for the failed half
   assert.ok(groups.every(query => !query.includes('100,101,102,103,104,105,106')));
   assert.equal(result.tracks.get('100').length, 1);
   assert.equal(result.tracks.get('101'), null); // present response, but no geometry
   assert.deepEqual(result.failedIds, ['106','107','108','109','110','111']);
   assert.equal(result.errors.length, 1);
+});
+
+test('a third Overpass source can recover a failed geometry query', async () => {
+  const endpoints = [];
+  const tracks = await fetchRelationTracks([99], async endpoint => {
+    endpoints.push(endpoint);
+    if (!endpoint.includes('overpass-api.de')) return {ok:false,status:504};
+    return {ok:true,json:async()=>({elements:[{
+      type:'relation',id:99,members:[{type:'way',ref:1,geometry:[{lat:38,lon:-0.5},{lat:38.01,lon:-0.49}]}],
+    }]})};
+  });
+  assert.equal(endpoints.length, 3);
+  assert.equal(tracks.get('99').length, 1);
 });
 
 test('runtime route endpoints contain no Overpass dependency', () => {
