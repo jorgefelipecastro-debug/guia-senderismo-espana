@@ -365,14 +365,21 @@ $('lost').onclick=()=>{
 $('stopGuide').onclick=()=>{navigationRecord=null;lastViewPoint=null;setNavMode('idle','Guía detenida. El mapa offline sigue disponible.');liveMap?.setGuide({});liveMap?.fitTrack();render();};
 const freshness=setInterval(()=>{if(watch!==null && lastFix && Date.now()-lastFix>30000){$('position').setAttribute('hidden','');$('gpsStatus').textContent='La posición GPS está desactualizada. Esperando una nueva señal…';}},5000);
 window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();liveMap?.destroy?.();document.body.style.overflow='';if(imageURL)URL.revokeObjectURL(imageURL);});
-(async()=>{
+async function checkOfflineBoot(){
   try{
-    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=29',{updateViaCache:'none'});
     const names=(await caches.keys()).filter(name=>/^encumbrate-public-v\d+$/.test(name)).sort((a,b)=>Number(b.split('v').at(-1))-Number(a.split('v').at(-1)));
     const required=['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/route-tiles.mjs','/offline/nav.mjs','/offline/tile-map.mjs','/offline/api.mjs'];
     let prepared=false;
     for(const name of names){const cache=await caches.open(name);if((await Promise.all(required.map(path=>cache.match(path)))).every(Boolean)){prepared=true;break;}}
     $('bootStatus').textContent=prepared?'Navegación offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
+  }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}
+}
+(async()=>{
+  try{
+    navigator.serviceWorker.addEventListener('controllerchange',()=>void checkOfflineBoot(),{once:true});
+    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=29',{updateViaCache:'none'});
+    await navigator.serviceWorker.ready;
+    await checkOfflineBoot();
   }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}
 })();
 
