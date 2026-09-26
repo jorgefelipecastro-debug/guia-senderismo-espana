@@ -100,7 +100,7 @@ export async function GET(request) {
     const offset = Math.max(0, Number.parseInt(params.get('cursor') || '0', 10) || 0);
     const limit = Math.min(200, Math.max(3, Number.parseInt(params.get('limit') || '200', 10) || 200));
     const stored = await databaseRoutes({ position, place, scope: params.get('scope'), offset, limit, radius });
-    return NextResponse.json({ ...stored, position, searchLabel: geocoded?.label || '', attribution: 'Catálogo nacional Encúmbrate · © OpenStreetMap contributors', queriedAt: new Date().toISOString(), catalogUpdatedAt: stored.region?.last_completed_at || null, catalogSource: 'supabase' }, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } });
+    return NextResponse.json({ ...stored, position, searchLabel: geocoded?.label || '', attribution: 'Catálogo nacional Encúmbrate · © OpenStreetMap contributors', queriedAt: new Date().toISOString(), catalogUpdatedAt: stored.region?.last_completed_at || null, catalogSource: 'supabase' }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     await recordServerError(error, { route: '/api/routes' });
     return NextResponse.json({ routes: [], position, attribution: 'Catálogo Encúmbrate temporalmente no disponible', error: 'No hemos podido consultar ahora el catálogo de rutas.' }, { status: 503 });

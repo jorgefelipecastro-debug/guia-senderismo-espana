@@ -366,10 +366,8 @@ export default function RouteCatalog() {
             );
           if (active) {
             setRoutes(body.routes || []);
-            localStorage.setItem(
-              OFFLINE_CATALOG_KEY,
-              JSON.stringify(body.routes || []),
-            );
+            try { localStorage.setItem(OFFLINE_CATALOG_KEY, JSON.stringify(body.routes || [])); }
+            catch { /* A full device must not hide a successful catalog response. */ }
             setNextCursor(body.nextCursor || null);
             setCatalogTotal(body.total || body.routes?.length || 0);
             setCatalogUpdatedAt(body.catalogUpdatedAt || null);
@@ -387,7 +385,7 @@ export default function RouteCatalog() {
             try {
               cached = JSON.parse(
                 localStorage.getItem(OFFLINE_CATALOG_KEY) || "[]",
-              );
+              ).filter(route => readOfflineRoute(route.id));
             } catch {}
             setRoutes(cached);
             setCatalogTotal(cached.length);

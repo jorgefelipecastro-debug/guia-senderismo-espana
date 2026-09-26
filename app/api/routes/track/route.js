@@ -20,14 +20,14 @@ export async function GET(request) {
     const geometry = await resolveRouteGeometry(raw);
     if (!geometry?.segments?.length)
       return withOperationalCors(request, NextResponse.json(
-        { error: "Esta fuente oficial no publica todavía un trazado navegable." },
-        { status: 503 },
+        { error: "Esta ruta no dispone de un trazado GPS verificado." },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
       ), "GET, OPTIONS");
     const points = flattenSegments(geometry.segments);
     if (points.length < 2)
       return withOperationalCors(request, NextResponse.json(
         { error: "El trazado público de esta ruta no está disponible ahora." },
-        { status: 503 },
+        { status: 404, headers: { "Cache-Control": "no-store" } },
       ), "GET, OPTIONS");
     return withOperationalCors(request, NextResponse.json(
       {
@@ -40,8 +40,7 @@ export async function GET(request) {
       },
       {
         headers: {
-          "Cache-Control":
-            "public, s-maxage=86400, stale-while-revalidate=604800",
+          "Cache-Control": "no-store",
         },
       },
     ), "GET, OPTIONS");

@@ -1,56 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
+import { resolveRouteGeometry } from '../../../../lib/route-geometry';
 import { recordServerError } from '../../../../lib/monitoring';
 
 export const dynamic = 'force-dynamic';
-
-const OVERPASS_ENDPOINTS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass-api.de/api/interpreter'];
-
-async function routeLines(id) {
-  const query = `[out:json][timeout:20];relation(${id})->.route;way(r.route);out geom;`;
-  let lastError;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', Accept: 'application/json', 'User-Agent': 'Encumbrate/1.0 (https://www.encumbrate.es)' },
-        body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.timeout(18000),
-        next: { revalidate: 604800 },
-      });
-      if (!response.ok) throw new Error(`Overpass ${response.status}`);
-      const data = await response.json();
-      return (data.elements || []).map(element => element.geometry).filter(line => Array.isArray(line) && line.length > 1);
-    } catch (error) { lastError = error; }
-  }
-  throw lastError || new Error('No route geometry available');
-}
-
-async function storedRouteLines(id) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  let route;
-  if (url && publishableKey) {
-    const publicClient = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data, error } = await publicClient.rpc('get_public_hiking_route_trace', { p_route_id: id });
-    if (error) throw error;
-    route = Array.isArray(data) ? data[0] : data;
-  } else {
-    const { data, error } = await getSupabaseAdmin().from('hiking_routes')
-      .select('raw_tags,source')
-      .eq('id', id)
-      .eq('published', true)
-      .maybeSingle();
-    if (error) throw error;
-    route = data ? { trace_points: data.raw_tags?.trace_points, source: data.source } : null;
-  }
-  const points = route?.trace_points;
-  if (!Array.isArray(points) || points.length < 2) return null;
-  const line = points.map(point => ({ lat: Number(point?.[0]), lon: Number(point?.[1]) }))
-    .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
-  return line.length > 1 ? { lines: [line], source: route.source === 'fedamon' ? 'FAM' : 'OFICIAL' } : null;
-}
 
 function simplify(line, maximum = 160) {
   if (line.length <= maximum) return line;
@@ -70,13 +22,12 @@ function traceSvg(lines, source = 'OSM') {
 }
 
 export async function GET(request) {
-  const id = String(request.nextUrl.searchParams.get('id') || ''), match = id.match(/^osm-relation-(\d+)$/);
+  const id = String(request.nextUrl.searchParams.get('id') || '');
   if (!/^[a-z0-9-]+$/i.test(id)) return NextResponse.json({ error: 'Identificador de ruta no válido.' }, { status: 400 });
   try {
-    const stored = match ? null : await storedRouteLines(id);
-    const lines = stored?.lines || (match ? await routeLines(match[1]) : []);
-    if (!lines.length) throw new Error('Empty route geometry');
-    return new NextResponse(traceSvg(lines, stored?.source || 'OSM'), { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } });
+    const geometry = await resolveRouteGeometry(id);
+    if (!geometry?.segments?.length) return NextResponse.json({ error: 'Esta ruta no dispone de un trazado GPS verificado.' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+    return new NextResponse(traceSvg(geometry.segments, geometry.source), { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } });
   } catch (error) {
     await recordServerError(error,{route:'/api/routes/trace'});
     return NextResponse.json({ error: 'No hemos podido dibujar ahora el trazado.' }, { status: 503 });
