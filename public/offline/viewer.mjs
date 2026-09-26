@@ -1,11 +1,11 @@
 import {validNavigationTrack,trackKey,mapBounds,pixel,readMap,removeMap,downloadMap,project,squareBoundsForPoints,boundsContainPoint,SIZE} from './maps.mjs';
-import {renderMosaicForBounds,downloadRouteDetail} from './mosaic.mjs';
+import {renderMosaicForBounds,downloadRouteDetail,readRouteMapPack} from './mosaic.mjs';
 import {accessPathState,bearingDegrees,compass,distanceMetres,formatDistance,gpsErrorMessage,routeMetrics,routeMetricsSegments,shouldSaveBreadcrumb} from './nav.mjs';
 import {createOfflineGpsMap} from './tile-map.mjs';
 import {operationalFetch} from './api.mjs';
 const ACCESS_PROFILE='street-walking-v2';
 const $=id=>document.getElementById(id), tracks=[];
-let track,record,mosaicRecord,navigationRecord,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null,accessRecalculating=false,lastAccessRecalcAt=0,lastAccessRecalcPoint=null;
+let track,record,mosaicRecord,navigationRecord,routePack,bounds,imageURL,watch=null,controller=null,zoom=1,selection=0,lastFix=0,position=null,navMode='idle',breadcrumbs=[],viewBusy=false,lastViewPoint=null,liveMap=null,firstGpsFrame=false,accessRoute=null,accessRecalculating=false,lastAccessRecalcAt=0,lastAccessRecalcPoint=null;
 try {
   for(let i=0;i<localStorage.length;i++) {
     const key=localStorage.key(i);
@@ -179,6 +179,8 @@ function render(resetZoom=true){
     const names=mosaicRecord.packNames?.length?mosaicRecord.packNames.join(', '):'cartografía territorial descargada';
     const coverage=Math.round((mosaicRecord.coverage||0)*100);
     $('mapStatus').textContent=`Mapa territorial offline disponible · ${names} · cobertura de esta vista ${coverage}%`;
+  }else if(routePack?.status==='ready'){
+    $('mapStatus').textContent=`Mapa interactivo offline guardado para toda la ruta · hasta zoom ${routePack.maxZoom}.`;
   }else{
     $('mapStatus').textContent='Solo trazado disponible. Descarga el mapa para ver el terreno sin conexión.';
   }
@@ -210,12 +212,13 @@ async function select(){
     console.error('No se pudo iniciar el mapa offline interactivo',error);
     $('gpsMapCanvas').textContent='No se ha podido abrir el mapa interactivo offline.';
   }
-  $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;mosaicRecord=null;navigationRecord=null;lastViewPoint=null;breadcrumbs=loadBreadcrumbs();accessRoute=loadAccessRoute();
+  $('details').hidden=false;$('name').textContent=track.name || 'Ruta guardada';$('downloadStatus').textContent='';record=null;mosaicRecord=null;navigationRecord=null;routePack=null;lastViewPoint=null;breadcrumbs=loadBreadcrumbs();accessRoute=loadAccessRoute();
   try {
     const saved=await readMap(track.id);
     if(version!==selection)return;
     if(saved?.key===trackKey(track))record=saved;
   }catch {$('downloadStatus').textContent='No se pudo abrir el almacén de mapas por ruta.';}
+  try{const savedPack=await readRouteMapPack(track.id,trackKey(track));if(version!==selection)return;routePack=savedPack;}catch{}
   if(!record && version===selection){
     try{
       const targetBounds=mapBounds(track);
@@ -231,12 +234,14 @@ async function select(){
 $('routes').addEventListener('change',select);select();
 $('download').onclick=async()=>{
   if(controller||!track)return;const current=track,version=selection;controller=new AbortController();
-  const active=controller,timer=setTimeout(()=>active.abort(),120000);$('cancel').hidden=false;connection();$('downloadStatus').textContent='Preparando detalle de ruta zoom 14–15…';
+  const active=controller,timer=setTimeout(()=>active.abort(),360000);$('cancel').hidden=false;connection();$('downloadStatus').textContent='Preparando cartografía de toda la ruta…';
   try{
     const pack=await downloadRouteDetail(current,{signal:active.signal,onProgress:p=>{if(version===selection)$('downloadStatus').textContent='Descargando detalle de ruta… '+p.percentage+'%';}});
     if(version!==selection)return;
-    record=null;navigationRecord=null;mosaicRecord=await renderMosaicForBounds(mapBounds(current));render();
-    $('downloadStatus').textContent='Detalle de ruta descargado · zoom 14–15 · '+pack.totalTiles+' teselas.';
+    record=null;navigationRecord=null;routePack=pack;
+    try{mosaicRecord=await renderMosaicForBounds(mapBounds(current));}catch{mosaicRecord=null;}
+    render();
+    $('downloadStatus').textContent=`Mapa de toda la ruta descargado · hasta zoom ${pack.maxZoom} · ${pack.totalTiles} teselas.`;
     try{await navigator.storage?.persist?.();}catch{}
   }catch(error){
     if(version===selection)$('downloadStatus').textContent=active.signal.aborted?'Descarga interrumpida. Puedes reintentar; lo ya guardado se conserva.':error.name==='QuotaExceededError'?'No hay espacio suficiente. Elimina un mapa que ya no necesites.':error.message;
@@ -362,10 +367,12 @@ const freshness=setInterval(()=>{if(watch!==null && lastFix && Date.now()-lastFi
 window.addEventListener('pagehide',()=>{clearInterval(freshness);stopGPS();controller?.abort();liveMap?.destroy?.();document.body.style.overflow='';if(imageURL)URL.revokeObjectURL(imageURL);});
 (async()=>{
   try{
-    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=24',{updateViaCache:'none'});
-    const cache=await caches.open('encumbrate-public-v24');
-    const resources=await Promise.all(['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/nav.mjs','/offline/tile-map.mjs'].map(path=>cache.match(path)));
-    $('bootStatus').textContent=resources.every(Boolean)?'Navegación offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
+    if(navigator.onLine)await navigator.serviceWorker.register('/sw.js?v=29',{updateViaCache:'none'});
+    const names=(await caches.keys()).filter(name=>/^encumbrate-public-v\d+$/.test(name)).sort((a,b)=>Number(b.split('v').at(-1))-Number(a.split('v').at(-1)));
+    const required=['/offline.html','/offline/viewer.mjs','/offline/maps.mjs','/offline/mosaic.mjs','/offline/route-tiles.mjs','/offline/nav.mjs','/offline/tile-map.mjs','/offline/api.mjs'];
+    let prepared=false;
+    for(const name of names){const cache=await caches.open(name);if((await Promise.all(required.map(path=>cache.match(path)))).every(Boolean)){prepared=true;break;}}
+    $('bootStatus').textContent=prepared?'Navegación offline guardada en este dispositivo.':'La pantalla offline aún se está preparando. Vuelve a abrirla con conexión antes de salir.';
   }catch{$('bootStatus').textContent='No se ha podido verificar el arranque offline en este navegador.';}
 })();
 
