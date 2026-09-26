@@ -30,7 +30,8 @@ export function validNavigationTrack(track) {
   const line=track.segments[0];
   if (!Array.isArray(line) || line.length<2) return false;
   const same=(a,b)=>Number.isFinite(a?.lat)&&Number.isFinite(a?.lon)&&a.lat===b?.lat&&a.lon===b?.lon;
-  return same(track.points[0],line[0])&&same(track.points.at(-1),line.at(-1));
+  const stepKm=(a,b)=>{const r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLon=(b.lon-a.lon)*r,h=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)**2;return 12742*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));};
+  return same(track.points[0],line[0])&&same(track.points.at(-1),line.at(-1))&&track.points.every((p,i)=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lon)&&(!i||stepKm(track.points[i-1],p)<=2));
 }
 export function trackKey(track) {
   let hash = 2166136261;

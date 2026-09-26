@@ -59,6 +59,7 @@ test('a gap or ambiguous branching cannot be flattened into a false path', () =>
   assert.equal(navigableSegments([[a, b], [c, d]]), null);
   assert.equal(navigableSegments([[a, b], [b, c], [b, d]]), null);
   assert.deepEqual(continuousRouteLine([[a, b], [b, c], [c, a]]), [a, c, b, a]);
+  assert.equal(navigableSegments([[a, { lat: 38.25, lon: -0.5 }]]), null);
 });
 
 test('source failures do not classify unverified routes as missing', async () => {

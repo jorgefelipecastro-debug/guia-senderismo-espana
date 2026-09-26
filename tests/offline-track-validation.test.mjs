@@ -12,4 +12,7 @@ test('los dos navegadores rechazan una descarga antigua con piezas separadas', (
   const updated = { ...old, points: [a, b], segments: [[a, b]] };
   assert.equal(isContinuousOfflineTrack(updated), true);
   assert.equal(validNavigationTrack(updated), true);
+  const jump = { ...updated, points: [a, { lat: 38.25, lon: -0.5 }], segments: [[a, { lat: 38.25, lon: -0.5 }]] };
+  assert.equal(isContinuousOfflineTrack(jump), false);
+  assert.equal(validNavigationTrack(jump), false);
 });
