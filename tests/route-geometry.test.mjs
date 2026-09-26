@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { flattenSegments, navigableSegments, relationSegments, routeDistanceKm, sampleSegments } from '../lib/route-geometry.js';
+import { continuousRouteLine, flattenSegments, navigableSegments, relationSegments, routeDistanceKm, sampleSegments } from '../lib/route-geometry.js';
 import { fetchRelationTracks } from '../lib/route-geometry-import.js';
 
 test('reconstructs relation ways from the official OpenStreetMap full response', () => {
@@ -37,12 +37,29 @@ test('only real Spanish route geometry qualifies for offline navigation', async 
     { type:'relation', id:100, members:[{type:'node',ref:12,role:'guidepost'}] },
   ] };
   const tracks = await fetchRelationTracks([99,100,101], async () => ({ok:true,json:async()=>reply}));
-  assert.equal(tracks.get('99').length, 2);
+  assert.equal(tracks.get('99').length, 1);
   assert.ok(routeDistanceKm(tracks.get('99')) > 1);
   assert.equal(tracks.get('100'), null);
   assert.equal(tracks.get('101'), null);
   assert.equal(navigableSegments([[{lat:0,lon:0},{lat:1,lon:1}]]), null);
   assert.equal(navigableSegments([[{lat:38,lon:-0.5},{lat:38,lon:-0.5}]]), null);
+});
+
+test('orders and reverses OSM ways into one continuous downloadable walk', () => {
+  const a = { lat: 38, lon: -0.5 }, b = { lat: 38.01, lon: -0.49 };
+  const c = { lat: 38.02, lon: -0.48 }, d = { lat: 38.03, lon: -0.47 };
+  const line = continuousRouteLine([[c, b], [c, d], [a, b]]);
+  assert.deepEqual(line, [d, c, b, a]);
+  assert.deepEqual(navigableSegments([[c, b], [c, d], [a, b]]), [[d, c, b, a]]);
+});
+
+test('a gap or ambiguous branching cannot be flattened into a false path', () => {
+  const a = { lat: 38, lon: -0.5 }, b = { lat: 38.01, lon: -0.49 };
+  const c = { lat: 38.02, lon: -0.48 }, d = { lat: 38.03, lon: -0.47 };
+  assert.equal(navigableSegments([[a, b], [c, d]]), null);
+  assert.equal(navigableSegments([[a, b], [b, c], [b, d]]), null);
+  assert.deepEqual(continuousRouteLine([[a, b], [b, c], [c, a]]), [a, c, b, a]);
+  assert.equal(navigableSegments([[a, { lat: 38.25, lon: -0.5 }]]), null);
 });
 
 test('source failures do not classify unverified routes as missing', async () => {

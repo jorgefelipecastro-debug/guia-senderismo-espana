@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isContinuousOfflineTrack } from "../lib/offline-track-validation";
 import "./route-map-explorer.css";
 
 const FALLBACK = { lat: 38.3452, lon: -0.4815 };
@@ -9,7 +10,7 @@ const LABELS = { principiante: "Principiante", intermedio: "Intermedio", experto
 const offlineKey = (id) => `encumbrate:offline-route:${id}`;
 
 function isDownloaded(id) {
-  try { return Boolean(localStorage.getItem(offlineKey(id))); } catch { return false; }
+  try { return isContinuousOfflineTrack(JSON.parse(localStorage.getItem(offlineKey(id)) || 'null')); } catch { return false; }
 }
 
 export default function RouteMapExplorer({ initialRoutes, completed, close, select }) {

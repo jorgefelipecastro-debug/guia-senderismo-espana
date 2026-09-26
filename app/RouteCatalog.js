@@ -13,6 +13,7 @@ import Weather from "./Weather";
 import { readSettings } from "../lib/app-settings";
 import { operationalFetch } from "../lib/operational-api";
 import { catalogFreshness } from "../lib/catalog-freshness";
+import { isContinuousOfflineTrack } from "../lib/offline-track-validation";
 import { classifyHikingRoute } from "../lib/route-classification";
 import {
   bearingDegrees,
@@ -114,11 +115,7 @@ function readOfflineRoute(routeId) {
         localStorage.setItem(offlineRouteKey(routeId), JSON.stringify(legacy));
       }
     }
-    return saved?.id === routeId &&
-      Array.isArray(saved.points) &&
-      saved.points.length > 1
-      ? saved
-      : null;
+    return saved?.id === routeId && isContinuousOfflineTrack(saved) ? saved : null;
   } catch {
     return null;
   }
@@ -129,7 +126,7 @@ async function downloadOfflineRoute(route) {
       { cache: "no-store" },
     ),
     body = await response.json();
-  if (!response.ok || !Array.isArray(body.points) || body.points.length < 2)
+  if (!response.ok || !isContinuousOfflineTrack(body))
     throw new Error(body.error || "No se ha podido descargar el trazado.");
   const saved = {
     id: route.id,
