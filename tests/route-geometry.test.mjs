@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { flattenSegments, relationSegments, routeDistanceKm, sampleSegments } from '../lib/route-geometry.js';
+import { flattenSegments, navigableSegments, relationSegments, routeDistanceKm, sampleSegments } from '../lib/route-geometry.js';
+import { fetchRelationTracks } from '../lib/route-geometry-import.js';
 
 test('reconstructs relation ways from the official OpenStreetMap full response', () => {
   const data = { elements: [
@@ -25,6 +26,27 @@ test('sampling preserves segment identity for elevation ascent calculations', ()
   const segments = [[{lat:1,lon:1},{lat:1.1,lon:1.1}],[{lat:2,lon:2},{lat:2.1,lon:2.1}]];
   const sampled = sampleSegments(segments, 4);
   assert.deepEqual(sampled.map(point => point.segment), [0,0,1,1]);
+});
+
+test('only real Spanish route geometry qualifies for offline navigation', async () => {
+  const reply = { elements: [
+    { type:'relation', id:99, members:[
+      {type:'way',ref:10,role:'',geometry:[{lat:38,lon:-0.5},{lat:38.01,lon:-0.49}]},
+      {type:'way',ref:11,role:'',geometry:[{lat:38.01,lon:-0.49},{lat:38.02,lon:-0.48}]},
+    ] },
+    { type:'relation', id:100, members:[{type:'node',ref:12,role:'guidepost'}] },
+  ] };
+  const tracks = await fetchRelationTracks([99,100,101], async () => ({ok:true,json:async()=>reply}));
+  assert.equal(tracks.get('99').length, 2);
+  assert.ok(routeDistanceKm(tracks.get('99')) > 1);
+  assert.equal(tracks.get('100'), null);
+  assert.equal(tracks.get('101'), null);
+  assert.equal(navigableSegments([[{lat:0,lon:0},{lat:1,lon:1}]]), null);
+  assert.equal(navigableSegments([[{lat:38,lon:-0.5},{lat:38,lon:-0.5}]]), null);
+});
+
+test('source failures do not classify unverified routes as missing', async () => {
+  await assert.rejects(fetchRelationTracks([99], async () => ({ok:false,status:503})), /Overpass 503/);
 });
 
 test('runtime route endpoints contain no Overpass dependency', () => {
