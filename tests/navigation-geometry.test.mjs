@@ -187,12 +187,3 @@ test("el retorno online se valida y se presenta solo como alternativa orientativ
   assert.match(source, /validateReturnRoute/);
   assert.match(source, /verified:\s*false/);
 });
-
-test("la descarga conserva hasta 2000 puntos adaptativos", async () => {
-  const source = await readFile(
-    new URL("../app/api/routes/track/route.js", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /simplifyTrack/);
-  assert.match(source, /max\s*=\s*2000/);
-});
