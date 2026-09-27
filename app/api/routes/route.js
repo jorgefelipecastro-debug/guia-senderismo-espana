@@ -38,7 +38,7 @@ function durationLabel(minutes) {
   return `${hours ? `${hours} h` : ''}${rest ? ` ${rest} min` : ''}`.trim();
 }
 
-function storedRoute(row, position, databaseDistanceM = null) {
+function storedRoute(row, position, databaseDistanceM = null, trackSource = null) {
   return {
     id: row.id, name: row.name, ref: row.route_ref || '',
     level: classifyHikingRoute(row.distance_km === null ? null : Number(row.distance_km), row.ascent_m),
@@ -52,6 +52,9 @@ function storedRoute(row, position, databaseDistanceM = null) {
     imageAttribution: row.image_credit || '', imageLicense: row.image_license || '', imageSourceUrl: row.image_source_url || '', imageGallery: [],
     wikipedia: row.wikipedia || '', wikidata: row.wikidata || '', commonsCategory: row.commons_category || '',
     sourceName: row.operator_name || 'OpenStreetMap', sourceUrl: row.source_url, officialUrl: row.official_url || '',
+    trackSourceName: trackSource?.geometry_source || '',
+    trackSourceUrl: trackSource?.geometry_source_url || '',
+    trackOfficial: Boolean(trackSource?.official),
     catalogLastSeenAt: row.last_seen_at || null, sourceUpdatedAt: row.source_updated_at || null,
     metricsSource: row.distance_km !== null || row.ascent_m !== null ? 'Datos públicos del catálogo Encúmbrate' : '',
     metricsSourceUrl: row.source_url, network: row.network || '', municipality: row.municipality || '',
@@ -79,7 +82,15 @@ async function databaseRoutes({ position, place, scope, offset, limit, radius })
     p_region_code: region?.code || null, p_offset: offset, p_limit: limit,
   });
   if (error) throw error;
-  const routes = (data || []).map(item => storedRoute(item.route, position, item.distance_m));
+  const ids = (data || []).map(item => item.route.id);
+  const { data: officialTracks, error: trackError } = ids.length
+    ? await supabase.from('hiking_route_tracks')
+      .select('route_id,geometry_source,geometry_source_url,official')
+      .in('route_id', ids).eq('official', true)
+    : { data: [] };
+  if (trackError) throw trackError;
+  const sourceById = new Map((officialTracks || []).map(track => [track.route_id, track]));
+  const routes = (data || []).map(item => storedRoute(item.route, position, item.distance_m, sourceById.get(item.route.id)));
   const total = Number(data?.[0]?.total_count || 0);
   return { routes, total, nextCursor: offset + routes.length < total ? String(offset + routes.length) : null, ...(region ? { region } : {}) };
 }

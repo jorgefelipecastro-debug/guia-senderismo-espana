@@ -134,6 +134,7 @@ async function downloadOfflineRoute(route) {
     points: body.points,
     segments: Array.isArray(body.segments) ? body.segments : undefined,
     source: body.source,
+    sourceUrl: body.sourceUrl,
     official: Boolean(body.official),
     geometryVersion: body.geometryVersion || "legacy",
     distanceKm: body.distanceKm,
@@ -215,9 +216,9 @@ function useRoutePhoto(route, enabled = true) {
           src: `/api/routes/trace?id=${encodeURIComponent(route.id)}`,
           specific: false,
           trace: true,
-          sourceUrl: route.sourceUrl,
-          credit: "Trazado público de OpenStreetMap",
-          license: "© OpenStreetMap contributors",
+          sourceUrl: route.trackSourceUrl || route.sourceUrl,
+          credit: route.trackSourceName || "Trazado público de OpenStreetMap",
+          license: route.trackOfficial ? "Fuente oficial" : "© OpenStreetMap contributors",
           gallery: [],
         };
         const resolved = data.found
@@ -239,9 +240,9 @@ function useRoutePhoto(route, enabled = true) {
           src: `/api/routes/trace?id=${encodeURIComponent(route.id)}`,
           specific: false,
           trace: true,
-          sourceUrl: route.sourceUrl,
-          credit: "Trazado público de OpenStreetMap",
-          license: "© OpenStreetMap contributors",
+          sourceUrl: route.trackSourceUrl || route.sourceUrl,
+          credit: route.trackSourceName || "Trazado público de OpenStreetMap",
+          license: route.trackOfficial ? "Fuente oficial" : "© OpenStreetMap contributors",
           gallery: [],
         };
         routePhotoCache.set(route.id, trace);
