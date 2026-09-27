@@ -30,6 +30,7 @@ export async function GET(request) {
         segments: geometry.segments,
         distanceKm: routeDistanceKm(geometry.segments),
         source: geometry.source,
+        sourceUrl: geometry.sourceUrl,
         official: geometry.official,
         geometryVersion: "continuous-v3",
       },
