@@ -41,10 +41,11 @@ function durationLabel(minutes) {
 function storedRoute(row, position, databaseDistanceM = null, trackSource = null) {
   return {
     id: row.id, name: row.name, ref: row.route_ref || '',
-    level: classifyHikingRoute(row.distance_km === null ? null : Number(row.distance_km), row.ascent_m),
+    level: classifyHikingRoute(row.distance_km === null ? null : Number(row.distance_km), row.ascent_m, row.official_difficulty),
     distanceKm: row.distance_km === null ? null : Number(row.distance_km),
     ascentM: row.ascent_m, maxAltitudeM: row.max_altitude_m, minAltitudeM: row.min_altitude_m,
     duration: durationLabel(row.duration_minutes), routeType: row.route_type || 'No publicado',
+    officialDifficulty: row.official_difficulty || null,
     description: row.description || `Sendero ${row.route_ref ? `${row.route_ref} ` : ''}publicado en OpenStreetMap. Comprueba siempre el estado y la señalización antes de salir.`,
     lat: row.latitude, lon: row.longitude,
     nearbyKm: Number.isFinite(Number(databaseDistanceM)) ? Number(databaseDistanceM) / 1000 : distanceKm(position.lat, position.lon, row.latitude, row.longitude),
