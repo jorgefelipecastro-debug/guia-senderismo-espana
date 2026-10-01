@@ -98,3 +98,5 @@ jobs:
         with:
           name: EncontrarMovil-v1.4-unsigned-tools
           path: /tmp/out/*
+
+# trigger build after workflow registration
