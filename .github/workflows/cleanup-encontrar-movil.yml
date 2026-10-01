@@ -1,0 +1,16 @@
+name: Cleanup temporary signing artifact
+on:
+  push:
+    branches: [cleanup-encontrar-movil]
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete temporary signing-key artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -L -sS -X DELETE             -H "Accept: application/vnd.github+json"             -H "Authorization: Bearer $GH_TOKEN"             -H "X-GitHub-Api-Version: 2026-03-10"             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/11182582202"
