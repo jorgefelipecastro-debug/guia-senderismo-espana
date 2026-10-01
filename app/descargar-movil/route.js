@@ -5,16 +5,17 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const apkPath = path.join(process.cwd(), 'public', 'EncontrarMovil-v1.3.apk');
+  const apkPath = path.join(process.cwd(), 'public', 'EncontrarMovil-v1.4.apk');
   const apk = await readFile(apkPath);
 
   return new Response(apk, {
     status: 200,
     headers: {
       'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Disposition': 'attachment; filename="EncontrarMovil-v1.3.apk"',
+      'Content-Disposition': 'attachment; filename="EncontrarMovil-v1.4.apk"',
       'Content-Length': String(apk.byteLength),
-      'Cache-Control': 'public, max-age=3600'
+      'Cache-Control': 'public, max-age=3600',
+      'X-Content-Type-Options': 'nosniff'
     }
   });
 }
