@@ -1,0 +1,123 @@
+name: Build EncontrarMovil v1.4 release
+on:
+  push:
+    branches: [build-encontrar-movil-v1-4]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Rebuild v1.3 source archive
+        run: |
+          cat apk-part-00.txt apk-part-01.txt apk-part-02a.txt apk-part-02b.txt apk-part-02c.txt apk-part-02d.txt apk-part-03.txt apk-part-04.txt | base64 -d > EncontrarMovil-Android-source-v1.3.zip
+          unzip -t EncontrarMovil-Android-source-v1.3.zip
+          unzip -q EncontrarMovil-Android-source-v1.3.zip
+
+      - name: Patch source to v1.4 security build
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          s=s.replace('    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n','')
+          p.write_text(s)
+
+          p=Path('android/app/src/main/java/com/findphone/home/MainActivity.java')
+          s=p.read_text().replace('import android.os.PowerManager;\n','')
+          old='''    private void requestBatteryExemption() {
+                  try {
+                      PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
+                      if (Build.VERSION.SDK_INT >= 23 && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                          Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()));
+                          startActivity(i); return;
+                      }
+                      Toast.makeText(this,"La app ya está excluida del ahorro de batería",Toast.LENGTH_SHORT).show();
+                  } catch (Exception e) {
+                      try { startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); }
+                      catch (Exception ignored) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+                  }
+              }
+          '''
+          new='''    private void requestBatteryExemption() {
+                  try {
+                      startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                      Toast.makeText(this,"En Batería, selecciona Sin restricciones si quieres máxima disponibilidad",Toast.LENGTH_LONG).show();
+                  } catch (Exception e) {
+                      try { startActivity(new Intent(Settings.ACTION_SETTINGS)); } catch (Exception ignored) { }
+                  }
+              }
+          '''
+          if old not in s:
+              raise SystemExit('Battery block not found')
+          p.write_text(s.replace(old,new))
+
+          p=Path('android/app/build.gradle')
+          s=p.read_text().replace("versionCode 4\n        versionName '1.3.0'", "versionCode 5\n        versionName '1.4.0'")
+          p.write_text(s)
+          PY
+
+      - name: Build unsigned release APK
+        working-directory: android
+        run: gradle assembleRelease --stacktrace
+
+      - name: Create stable signing key for v1.4
+        run: |
+          PASS="$(openssl rand -hex 20)"
+          echo "$PASS" > signing-password.txt
+          keytool -genkeypair -v             -keystore EncontrarMovil-release.jks             -storepass "$PASS"             -keypass "$PASS"             -alias encontrarmovil             -keyalg RSA -keysize 3072 -validity 10000             -dname "CN=Encontrar Movil, OU=Personal App, O=Jorge Felipe, L=Alicante, C=ES"
+
+      - name: Align and sign release APK
+        run: |
+          PASS="$(cat signing-password.txt)"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -p -f 4             android/app/build/outputs/apk/release/app-release-unsigned.apk             EncontrarMovil-v1.4-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks EncontrarMovil-release.jks             --ks-key-alias encontrarmovil             --ks-pass pass:"$PASS"             --key-pass pass:"$PASS"             --out EncontrarMovil-v1.4.apk             EncontrarMovil-v1.4-aligned.apk
+
+      - name: Verify APK
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs EncontrarMovil-v1.4.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging EncontrarMovil-v1.4.apk | head -30
+          sha256sum EncontrarMovil-v1.4.apk | tee SHA256SUMS-v1.4.txt
+          printf "GUARDA ESTOS DOS ARCHIVOS PARA FIRMAR FUTURAS ACTUALIZACIONES DE ESTA APP.\nAlias: encontrarmovil\nPassword: %s\n" "$(cat signing-password.txt)" > FIRMA-PRIVADA-LEEME.txt
+          ls -lh EncontrarMovil-v1.4.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EncontrarMovil-v1.4-release
+          path: |
+            EncontrarMovil-v1.4.apk
+            SHA256SUMS-v1.4.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EncontrarMovil-v1.4-signing-key-private
+          path: |
+            EncontrarMovil-release.jks
+            FIRMA-PRIVADA-LEEME.txt
+
+      - name: Publish APK on isolated branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f EncontrarMovil-v1.4.apk SHA256SUMS-v1.4.txt
+          git commit -m "Publicar APK release EncontrarMovil v1.4 [skip ci]"
+          git push origin HEAD:build-encontrar-movil-v1-4
