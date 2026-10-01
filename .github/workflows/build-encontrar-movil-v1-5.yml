@@ -1,4 +1,4 @@
-name: Build EncontrarMovil v1.5 unsigned
+name: Build EncontrarMovil v1.5 secure unsigned
 on:
   push:
     branches: [build-encontrar-movil-v1-5-unsigned]
@@ -26,50 +26,252 @@ jobs:
           unzip -t EncontrarMovil-Android-source-v1.3.zip
           unzip -q EncontrarMovil-Android-source-v1.3.zip
 
-      - name: Patch source to v1.5
+      - name: Apply security hardening
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('android/app/src/main/AndroidManifest.xml')
-          s=p.read_text()
-          s=s.replace('    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n','')
-          p.write_text(s)
+          import re
 
-          p=Path('android/app/src/main/java/com/findphone/home/MainActivity.java')
-          s=p.read_text().replace('import android.os.PowerManager;\n','')
-          old='''    private void requestBatteryExemption() {
-                  try {
-                      PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
-                      if (Build.VERSION.SDK_INT >= 23 && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                          Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()));
-                          startActivity(i); return;
-                      }
-                      Toast.makeText(this,"La app ya está excluida del ahorro de batería",Toast.LENGTH_SHORT).show();
-                  } catch (Exception e) {
-                      try { startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); }
-                      catch (Exception ignored) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
-                  }
-              }
-          '''
-          new='''    private void requestBatteryExemption() {
-                  try {
-                      startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
-                      Toast.makeText(this,"En Batería, selecciona Sin restricciones si quieres máxima disponibilidad",Toast.LENGTH_LONG).show();
-                  } catch (Exception e) {
-                      try { startActivity(new Intent(Settings.ACTION_SETTINGS)); } catch (Exception ignored) { }
-                  }
-              }
-          '''
+          root=Path('android')
+
+          svc=root/'app/src/main/java/com/findphone/home/FindPhoneService.java'
+          s=svc.read_text()
+          for x in [
+              'import java.util.HashMap;\n',
+              'import java.util.Map;\n',
+              'import java.util.concurrent.ExecutorService;\n',
+              'import java.util.concurrent.Executors;\n'
+          ]:
+              s=s.replace(x,'')
+          s=s.replace('    private Thread localThread;\n','')
+          s=s.replace('    private ServerSocket localServer;\n','')
+          s=s.replace('    private final ExecutorService localClients = Executors.newFixedThreadPool(2);\n','')
+          s=s.replace('        startLocalServer();\n','')
+          s=s.replace('        closeLocalServer();\n        if (localThread != null) localThread.interrupt();\n','')
+          s=s.replace('        localClients.shutdownNow();\n','')
+          a=s.index('    // MODO CASA:')
+          b=s.index('    // MODO REMOTO:')
+          s=s[:a]+s[b:]
+          s=s.replace('    private volatile HttpURLConnection currentPoll;','    private volatile javax.net.ssl.HttpsURLConnection currentPoll;')
+          s=s.replace('        HttpURLConnection c = currentPoll;','        javax.net.ssl.HttpsURLConnection c = currentPoll;')
+
+          old='''    private String get(String u) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
+        currentPoll = c;
+        try {
+            c.setConnectTimeout(12_000);
+            c.setReadTimeout(285_000);
+            c.setRequestProperty("Authorization", "Bearer " + Config.token(this));
+            c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("Connection", "keep-alive");
+            int code = c.getResponseCode();
+            InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+            String body = read(in);
+            if (code < 200 || code >= 300) throw new IOException("HTTP " + code);
+            return body;
+        } finally {
+            currentPoll = null;
+            // Do not disconnect after a successful, fully-consumed response: HttpURLConnection
+            // can reuse the underlying TLS connection for the next long-poll/ACK.
+        }
+    }
+
+    private void ack(long seq) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(Config.url(this) + "/api/device/ack").openConnection();
+            c.setConnectTimeout(8_000);
+            c.setReadTimeout(8_000);
+            c.setRequestMethod("POST");
+            c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + Config.token(this));
+            c.setRequestProperty("Content-Type", "application/json");
+            byte[] b = ("{\"seq\":" + seq + "}").getBytes(StandardCharsets.UTF_8);
+            try (OutputStream out = c.getOutputStream()) { out.write(b); }
+            int code = c.getResponseCode();
+            InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+            read(in); // consume response so the connection can return to Android's HTTP pool
+        } catch (Exception ignored) { }
+    }
+'''
+          new='''    private javax.net.ssl.HttpsURLConnection openHttps(String u) throws Exception {
+        URL url = new URL(u);
+        if (!"https".equalsIgnoreCase(url.getProtocol())) throw new SecurityException("Solo HTTPS");
+        URLConnection raw = url.openConnection();
+        if (!(raw instanceof javax.net.ssl.HttpsURLConnection)) throw new SecurityException("Conexión no TLS");
+        javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection) raw;
+        c.setInstanceFollowRedirects(false);
+        c.setUseCaches(false);
+        return c;
+    }
+
+    private String get(String u) throws Exception {
+        javax.net.ssl.HttpsURLConnection c = openHttps(u);
+        currentPoll = c;
+        try {
+            c.setConnectTimeout(12_000);
+            c.setReadTimeout(285_000);
+            c.setRequestProperty("Authorization", "Bearer " + Config.token(this));
+            c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("Connection", "keep-alive");
+            int code = c.getResponseCode();
+            InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+            String body = read(in);
+            if (code < 200 || code >= 300) throw new IOException("HTTPS " + code);
+            return body;
+        } finally {
+            currentPoll = null;
+        }
+    }
+
+    private void ack(long seq) {
+        try {
+            javax.net.ssl.HttpsURLConnection c = openHttps(Config.url(this) + "/api/device/ack");
+            c.setConnectTimeout(8_000);
+            c.setReadTimeout(8_000);
+            c.setRequestMethod("POST");
+            c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + Config.token(this));
+            c.setRequestProperty("Content-Type", "application/json");
+            byte[] b = ("{\"seq\":" + seq + "}").getBytes(StandardCharsets.UTF_8);
+            try (OutputStream out = c.getOutputStream()) { out.write(b); }
+            int code = c.getResponseCode();
+            InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+            read(in);
+            if (code < 200 || code >= 300) throw new IOException("HTTPS " + code);
+        } catch (Exception ignored) { }
+    }
+'''
           if old not in s:
-              raise SystemExit('Battery block not found')
-          p.write_text(s.replace(old,new))
+              raise SystemExit('Network block not found')
+          s=s.replace(old,new)
 
-          p=Path('android/app/build.gradle')
-          s=p.read_text()
-          s=s.replace("applicationId 'com.findphone.home'","applicationId 'com.jorgefelipe.encontrarmovil'")
-          s=s.replace("versionCode 4\n        versionName '1.3.0'", "versionCode 6\n        versionName '1.5.0'")
-          p.write_text(s)
+          old_read='''    private static String read(InputStream in) throws IOException {
+        if (in == null) return "";
+        try (InputStream input = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] b = new byte[2048];
+            int n;
+            while ((n = input.read(b)) != -1) out.write(b, 0, n);
+            return out.toString("UTF-8");
+        }
+    }
+'''
+          new_read='''    private static String read(InputStream in) throws IOException {
+        if (in == null) return "";
+        final int MAX = 32 * 1024;
+        try (InputStream input = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] b = new byte[2048];
+            int n, total = 0;
+            while ((n = input.read(b)) != -1) {
+                total += n;
+                if (total > MAX) throw new IOException("Respuesta demasiado grande");
+                out.write(b, 0, n);
+            }
+            return out.toString("UTF-8");
+        }
+    }
+'''
+          if old_read not in s:
+              raise SystemExit('Read block not found')
+          svc.write_text(s.replace(old_read,new_read))
+
+          cfg=root/'app/src/main/java/com/findphone/home/Config.java'
+          c=cfg.read_text().replace('import java.security.SecureRandom;\n','').replace('    private static final SecureRandom RNG = new SecureRandom();\n','')
+          c=re.sub(r'\n    public static int localPort\(Context c\).*?\n    }\n','\n',c,flags=re.S)
+          cfg.write_text(c)
+
+          main=root/'app/src/main/java/com/findphone/home/MainActivity.java'
+          m=main.read_text()
+          for x in [
+              'import android.content.ClipData;\n',
+              'import android.content.ClipboardManager;\n',
+              'import android.content.Context;\n',
+              'import android.os.PowerManager;\n',
+              'import java.net.Inet4Address;\n',
+              'import java.net.NetworkInterface;\n',
+              'import java.util.Collections;\n'
+          ]:
+              m=m.replace(x,'')
+          m=m.replace('    private TextView localUrl;\n    private TextView localPin;\n','')
+          m=m.replace('        Config.localPin(this);\n','')
+          a=m.index('        heading(root, "Acceso local · misma Wi‑Fi (opcional)");')
+          b=m.index('        heading(root, "Fiabilidad en segundo plano");')
+          m=m[:a]+m[b:]
+          m=m.replace('''    private void refresh() {
+        status.setText("● RECEPTOR ACTIVADO · " + networkLabel());
+        String u = getLocalUrl();
+        localUrl.setText(u == null ? "Web local: conecta el móvil a la Wi‑Fi" : "Web local: " + u);
+        localPin.setText("PIN: " + Config.localPin(this));
+    }
+''','''    private void refresh() {
+        status.setText("● RECEPTOR ACTIVADO · " + networkLabel());
+    }
+''')
+          a=m.find('    private String getLocalUrl() {')
+          if a != -1:
+              b=m.find('    private void requestBatteryExemption()',a)
+              m=m[:a]+m[b:]
+          old_batt='''    private void requestBatteryExemption() {
+        try {
+            PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
+            if (Build.VERSION.SDK_INT >= 23 && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()));
+                startActivity(i); return;
+            }
+            Toast.makeText(this,"La app ya está excluida del ahorro de batería",Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            try { startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); }
+            catch (Exception ignored) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+        }
+    }
+'''
+          new_batt='''    private void requestBatteryExemption() {
+        try {
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this,"En Batería, selecciona Sin restricciones si quieres máxima disponibilidad",Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            try { startActivity(new Intent(Settings.ACTION_SETTINGS)); } catch (Exception ignored) { }
+        }
+    }
+'''
+          m=m.replace(old_batt,new_batt)
+          m=m.replace('t.length() < 12','t.length() < 32')
+          m=m.replace('El código remoto debe tener al menos 12 caracteres','El código remoto debe tener al menos 32 caracteres')
+          m=m.replace('Este es el modo principal: funciona aunque el móvil perdido no tenga Wi‑Fi. Con cobertura y datos móviles activos, recibe la orden desde la web privada. La conexión de espera es de muy bajo tráfico y se reconecta automáticamente al cambiar entre Wi‑Fi y datos.','Modo seguro: la app NO abre puertos ni acepta conexiones entrantes. Solo inicia conexiones salientes cifradas por HTTPS hacia tu servidor privado. Funciona con Wi‑Fi o datos móviles y se reconecta automáticamente.')
+          main.write_text(m)
+
+          man=root/'app/src/main/AndroidManifest.xml'
+          x=man.read_text()
+          x=x.replace('    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n','')
+          x=x.replace('    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n','')
+          x=x.replace('        android:usesCleartextTraffic="false">','        android:usesCleartextTraffic="false"\n        android:networkSecurityConfig="@xml/network_security_config">')
+          x=x.replace('from a local or private web panel.','from a private HTTPS control panel. No inbound network listener.')
+          man.write_text(x)
+
+          xml=root/'app/src/main/res/xml'
+          xml.mkdir(parents=True,exist_ok=True)
+          (xml/'network_security_config.xml').write_text('''<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+''')
+
+          grad=root/'app/build.gradle'
+          g=grad.read_text()
+          g=g.replace("applicationId 'com.findphone.home'","applicationId 'com.jorgefelipe.encontrarmovil'")
+          g=g.replace("versionCode 4\n        versionName '1.3.0'","versionCode 7\n        versionName '1.5.0'")
+          grad.write_text(g)
           PY
+
+      - name: Security checks
+        run: |
+          ! grep -R "ServerSocket\|0.0.0.0\|localPort\|localPin" -n android/app/src/main
+          ! grep -R "http://" -n android/app/src/main/java
+          grep -q 'usesCleartextTraffic="false"' android/app/src/main/AndroidManifest.xml
+          grep -q 'networkSecurityConfig' android/app/src/main/AndroidManifest.xml
 
       - name: Build release APK
         working-directory: android
@@ -77,14 +279,14 @@ jobs:
 
       - name: Align unsigned APK
         run: |
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -p -f 4             android/app/build/outputs/apk/release/app-release-unsigned.apk             EncontrarMovil-v1.5-unsigned-aligned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 EncontrarMovil-v1.5-unsigned-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -p -f 4             android/app/build/outputs/apk/release/app-release-unsigned.apk             EncontrarMovil-v1.5-secure-unsigned-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 EncontrarMovil-v1.5-secure-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
-          ls -lh EncontrarMovil-v1.5-unsigned-aligned.apk apksigner.jar
+          ls -lh EncontrarMovil-v1.5-secure-unsigned-aligned.apk apksigner.jar
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EncontrarMovil-v1.5-unsigned-tools
+          name: EncontrarMovil-v1.5-secure-unsigned-tools
           path: |
-            EncontrarMovil-v1.5-unsigned-aligned.apk
+            EncontrarMovil-v1.5-secure-unsigned-aligned.apk
             apksigner.jar
