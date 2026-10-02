@@ -4,6 +4,10 @@ on:
     branches: [build-encontrar-movil-v1-6-wizard]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -57,8 +61,21 @@ jobs:
           grep -q 'ACTION_APP_DATA_USAGE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
 
       - name: Build release APK and AAB
+        id: android_build
+        continue-on-error: true
         working-directory: android
-        run: gradle assembleRelease bundleRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleRelease bundleRelease --stacktrace 2>&1 | tee ../build-v1.6.log
+
+      - name: Report build error for debugging
+        if: steps.android_build.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tail -n 220 build-v1.6.log > build-error-v1.6.txt
+          gh issue create --title "TEMP build error EncontrarMovil v1.6 run $GITHUB_RUN_ID" --body-file build-error-v1.6.txt
+          exit 1
 
       - name: Align unsigned APK
         run: |
