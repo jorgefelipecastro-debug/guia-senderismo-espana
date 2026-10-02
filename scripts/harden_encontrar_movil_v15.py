@@ -207,5 +207,12 @@ xml.mkdir(parents=True, exist_ok=True)
 grad = root / "app/build.gradle"
 g = grad.read_text()
 g = g.replace("applicationId 'com.findphone.home'", "applicationId 'com.jorgefelipe.encontrarmovil'")
-g = g.replace("versionCode 4\n        versionName '1.3.0'", "versionCode 8\n        versionName '1.5.1'")
+g = g.replace("compileSdk 35", "compileSdk 36")
+g = g.replace("targetSdk 35", "targetSdk 36")
+g = g.replace("versionCode 4\n        versionName '1.3.0'", "versionCode 9\n        versionName '1.5.2'")
 grad.write_text(g)
+
+root_grad = root / "build.gradle"
+rg = root_grad.read_text()
+rg = rg.replace("id 'com.android.application' version '8.8.2' apply false", "id 'com.android.application' version '8.9.1' apply false")
+root_grad.write_text(rg)
