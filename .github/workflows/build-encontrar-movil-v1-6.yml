@@ -1,7 +1,7 @@
 name: Build EncontrarMovil v1.6 wizard unsigned
 on:
   push:
-    branches: [build-encontrar-movil-v1-6-wizard]
+    branches: [build-encontrar-movil-v1-7-lock-alarm]
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,12 @@ jobs:
 
       - name: Add adaptive setup wizard
         run: python scripts/setup_wizard_v16.py
+
+      - name: Inspect alarm service for v1.7 patch
+        run: |
+          echo "===== FINDPHONESERVICE BEGIN ====="
+          sed -n '1,420p' android/app/src/main/java/com/findphone/home/FindPhoneService.java
+          echo "===== FINDPHONESERVICE END ====="
 
       - name: Upgrade release metadata to v1.6.0 / API 36
         run: |
