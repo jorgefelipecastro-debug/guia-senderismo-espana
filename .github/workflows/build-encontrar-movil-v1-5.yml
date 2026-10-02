@@ -17,11 +17,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.11.1'
 
       - name: Rebuild source archive
         run: |
@@ -40,6 +40,14 @@ jobs:
           grep -q 'usesCleartextTraffic="false"' android/app/src/main/AndroidManifest.xml
           grep -q 'networkSecurityConfig' android/app/src/main/AndroidManifest.xml
 
+      - name: Upgrade project to API 36
+        run: |
+          sed -i "s/compileSdk 35/compileSdk 36/" android/app/build.gradle
+          sed -i "s/targetSdk 35/targetSdk 36/" android/app/build.gradle
+          sed -i "s/versionCode 8/versionCode 9/" android/app/build.gradle
+          sed -i "s/versionName '1.5.1'/versionName '1.5.2'/" android/app/build.gradle
+          sed -i "s/version '8.8.2'/version '8.9.1'/" android/build.gradle
+
       - name: Build release APK and AAB
         working-directory: android
         run: gradle assembleRelease bundleRelease --stacktrace
@@ -49,13 +57,13 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -p -f 4             android/app/build/outputs/apk/release/app-release-unsigned.apk             EncontrarMovil-v1.5-secure-unsigned-aligned.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 EncontrarMovil-v1.5-secure-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
-          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.5.1-unsigned.aab
-          ls -lh EncontrarMovil-v1.5-secure-unsigned-aligned.apk EncontrarMovil-v1.5.1-unsigned.aab apksigner.jar
+          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.5.2-unsigned.aab
+          ls -lh EncontrarMovil-v1.5-secure-unsigned-aligned.apk EncontrarMovil-v1.5.2-unsigned.aab apksigner.jar
 
       - uses: actions/upload-artifact@v4
         with:
           name: EncontrarMovil-v1.5-secure-unsigned-tools
           path: |
             EncontrarMovil-v1.5-secure-unsigned-aligned.apk
-            EncontrarMovil-v1.5.1-unsigned.aab
+            EncontrarMovil-v1.5.2-unsigned.aab
             apksigner.jar
