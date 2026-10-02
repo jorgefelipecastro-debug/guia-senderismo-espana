@@ -57,8 +57,8 @@ jobs:
           grep -q 'networkSecurityConfig' android/app/src/main/AndroidManifest.xml
           grep -q 'android:exported="false"' android/app/src/main/AndroidManifest.xml
           grep -q 'Paso ' android/app/src/main/java/com/findphone/home/MainActivity.java
-          grep -q 'ACTION_ZEN_MODE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
-          grep -q 'ACTION_APP_DATA_USAGE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
+          grep -q 'android.settings.ZEN_MODE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
+          grep -q 'android.settings.APP_DATA_USAGE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
 
       - name: Build release APK and AAB
         id: android_build
