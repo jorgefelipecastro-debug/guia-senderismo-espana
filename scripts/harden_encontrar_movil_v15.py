@@ -186,6 +186,10 @@ x = x.replace(
     "from a local or private web panel.",
     "from a private HTTPS control panel. No inbound network listener."
 )
+x = x.replace(
+    'android:name=".BootReceiver"\n            android:enabled="true"\n            android:exported="true"',
+    'android:name=".BootReceiver"\n            android:enabled="true"\n            android:exported="false"'
+)
 man.write_text(x)
 
 xml = root / "app/src/main/res/xml"
@@ -203,5 +207,5 @@ xml.mkdir(parents=True, exist_ok=True)
 grad = root / "app/build.gradle"
 g = grad.read_text()
 g = g.replace("applicationId 'com.findphone.home'", "applicationId 'com.jorgefelipe.encontrarmovil'")
-g = g.replace("versionCode 4\n        versionName '1.3.0'", "versionCode 7\n        versionName '1.5.0'")
+g = g.replace("versionCode 4\n        versionName '1.3.0'", "versionCode 8\n        versionName '1.5.1'")
 grad.write_text(g)
