@@ -40,20 +40,22 @@ jobs:
           grep -q 'usesCleartextTraffic="false"' android/app/src/main/AndroidManifest.xml
           grep -q 'networkSecurityConfig' android/app/src/main/AndroidManifest.xml
 
-      - name: Build release APK
+      - name: Build release APK and AAB
         working-directory: android
-        run: gradle assembleRelease --stacktrace
+        run: gradle assembleRelease bundleRelease --stacktrace
 
       - name: Align unsigned APK
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -p -f 4             android/app/build/outputs/apk/release/app-release-unsigned.apk             EncontrarMovil-v1.5-secure-unsigned-aligned.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 EncontrarMovil-v1.5-secure-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
-          ls -lh EncontrarMovil-v1.5-secure-unsigned-aligned.apk apksigner.jar
+          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.5.1-unsigned.aab
+          ls -lh EncontrarMovil-v1.5-secure-unsigned-aligned.apk EncontrarMovil-v1.5.1-unsigned.aab apksigner.jar
 
       - uses: actions/upload-artifact@v4
         with:
           name: EncontrarMovil-v1.5-secure-unsigned-tools
           path: |
             EncontrarMovil-v1.5-secure-unsigned-aligned.apk
+            EncontrarMovil-v1.5.1-unsigned.aab
             apksigner.jar
