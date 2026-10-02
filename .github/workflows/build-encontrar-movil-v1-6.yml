@@ -1,4 +1,4 @@
-name: Build EncontrarMovil v1.8.1 validated bundle
+name: Build EncontrarMovil v1.8.2 wizard help
 on:
   push:
     branches: [build-encontrar-movil-v1-8-2-helptext]
@@ -46,16 +46,13 @@ jobs:
       - name: Re-show alarm banner after unlock
         run: python scripts/unlock_alarm_banner_v18.py
 
-      - name: Inspect wizard source for help text patch
-        run: |
-          echo "===== MAINACTIVITY BEGIN ====="
-          sed -n '1,520p' android/app/src/main/java/com/findphone/home/MainActivity.java
-          echo "===== MAINACTIVITY END ====="
+      - name: Add brief explanations to setup wizard
+        run: python scripts/wizard_helptext_v182.py
 
-      - name: Upgrade release metadata to v1.8.1 / API 36
+      - name: Upgrade release metadata to v1.8.2 / API 36
         run: |
-          sed -i "s/versionCode 9/versionCode 13/" android/app/build.gradle
-          sed -i "s/versionName '1.5.2'/versionName '1.8.1'/" android/app/build.gradle
+          sed -i "s/versionCode 9/versionCode 14/" android/app/build.gradle
+          sed -i "s/versionName '1.5.2'/versionName '1.8.2'/" android/app/build.gradle
           sed -i "s/compileSdk 35/compileSdk 36/" android/app/build.gradle
           sed -i "s/targetSdk 35/targetSdk 36/" android/app/build.gradle
           sed -i "s/version '8.8.2'/version '8.9.1'/" android/build.gradle
@@ -76,6 +73,9 @@ jobs:
           grep -q 'VISIBILITY_PUBLIC' android/app/src/main/java/com/findphone/home/FindPhoneService.java
           grep -q 'ACTION_USER_PRESENT' android/app/src/main/java/com/findphone/home/FindPhoneService.java
           grep -q 'ALARM_NOTIF_B' android/app/src/main/java/com/findphone/home/FindPhoneService.java
+          grep -q '¿Por qué hace falta?' android/app/src/main/java/com/findphone/home/MainActivity.java
+          grep -q 'Permite mostrar avisos importantes' android/app/src/main/java/com/findphone/home/MainActivity.java
+          grep -q 'Si oyes la alarma, la configuración está lista.' android/app/src/main/java/com/findphone/home/MainActivity.java
 
       - name: Build release APK and AAB
         id: android_build
@@ -103,17 +103,17 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -p -f 4 \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk
+            EncontrarMovil-v1.8.2-helptext-unsigned-aligned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.8.2-helptext-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" apksigner.jar
-          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.8.1-unsigned.aab
-          sha256sum EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk EncontrarMovil-v1.8.1-unsigned.aab > SHA256SUMS-v1.8.1.txt
+          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.8.2-unsigned.aab
+          sha256sum EncontrarMovil-v1.8.2-helptext-unsigned-aligned.apk EncontrarMovil-v1.8.2-unsigned.aab > SHA256SUMS-v1.8.2.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EncontrarMovil-v1.8.1-validated-unsigned-tools
+          name: EncontrarMovil-v1.8.2-helptext-validated-tools
           path: |
-            EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk
-            EncontrarMovil-v1.8.1-unsigned.aab
-            SHA256SUMS-v1.8.1.txt
+            EncontrarMovil-v1.8.2-helptext-unsigned-aligned.apk
+            EncontrarMovil-v1.8.2-unsigned.aab
+            SHA256SUMS-v1.8.2.txt
             apksigner.jar
