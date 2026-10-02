@@ -1,7 +1,7 @@
-name: Build EncontrarMovil v1.8 unlock banner unsigned
+name: Build EncontrarMovil v1.8.1 validated bundle
 on:
   push:
-    branches: [build-encontrar-movil-v1-8-unlock-banner]
+    branches: [build-encontrar-movil-v1-8-1-valid-bundle]
   workflow_dispatch:
 
 permissions:
@@ -46,10 +46,10 @@ jobs:
       - name: Re-show alarm banner after unlock
         run: python scripts/unlock_alarm_banner_v18.py
 
-      - name: Upgrade release metadata to v1.8.0 / API 36
+      - name: Upgrade release metadata to v1.8.1 / API 36
         run: |
-          sed -i "s/versionCode 9/versionCode 12/" android/app/build.gradle
-          sed -i "s/versionName '1.5.2'/versionName '1.8.0'/" android/app/build.gradle
+          sed -i "s/versionCode 9/versionCode 13/" android/app/build.gradle
+          sed -i "s/versionName '1.5.2'/versionName '1.8.1'/" android/app/build.gradle
           sed -i "s/compileSdk 35/compileSdk 36/" android/app/build.gradle
           sed -i "s/targetSdk 35/targetSdk 36/" android/app/build.gradle
           sed -i "s/version '8.8.2'/version '8.9.1'/" android/build.gradle
@@ -88,21 +88,26 @@ jobs:
           gh issue create --title "TEMP build error EncontrarMovil v1.6 run $GITHUB_RUN_ID" --body-file build-error-v1.6.txt
           exit 1
 
+      - name: Validate Android App Bundle with official bundletool
+        run: |
+          curl -L --fail --retry 3             -o bundletool.jar             https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
+          java -jar bundletool.jar validate             --bundle=android/app/build/outputs/bundle/release/app-release.aab
+
       - name: Align unsigned APK
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -p -f 4 \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            EncontrarMovil-v1.8.0-unlock-banner-unsigned-aligned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.8.0-unlock-banner-unsigned-aligned.apk
+            EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" apksigner.jar
-          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.8.0-unsigned.aab
-          sha256sum EncontrarMovil-v1.8.0-unlock-banner-unsigned-aligned.apk EncontrarMovil-v1.8.0-unsigned.aab > SHA256SUMS-v1.8.0.txt
+          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.8.1-unsigned.aab
+          sha256sum EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk EncontrarMovil-v1.8.1-unsigned.aab > SHA256SUMS-v1.8.1.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EncontrarMovil-v1.8.0-unlock-banner-unsigned-tools
+          name: EncontrarMovil-v1.8.1-validated-unsigned-tools
           path: |
-            EncontrarMovil-v1.8.0-unlock-banner-unsigned-aligned.apk
-            EncontrarMovil-v1.8.0-unsigned.aab
-            SHA256SUMS-v1.8.0.txt
+            EncontrarMovil-v1.8.1-unlock-banner-unsigned-aligned.apk
+            EncontrarMovil-v1.8.1-unsigned.aab
+            SHA256SUMS-v1.8.1.txt
             apksigner.jar
