@@ -88,16 +88,16 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -p -f 4 \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
             EncontrarMovil-v1.7.0-lockscreen-unsigned-aligned.apk
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.7.0-lockscreen-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" apksigner.jar
           cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.7.0-unsigned.aab
-          sha256sum EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk EncontrarMovil-v1.6.0-unsigned.aab > SHA256SUMS-v1.7.0.txt
+          sha256sum EncontrarMovil-v1.7.0-lockscreen-unsigned-aligned.apk EncontrarMovil-v1.7.0-unsigned.aab > SHA256SUMS-v1.7.0.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: EncontrarMovil-v1.7.0-lockscreen-unsigned-tools
           path: |
-            EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk
-            EncontrarMovil-v1.6.0-unsigned.aab
-            SHA256SUMS-v1.6.0.txt
+            EncontrarMovil-v1.7.0-lockscreen-unsigned-aligned.apk
+            EncontrarMovil-v1.7.0-unsigned.aab
+            SHA256SUMS-v1.7.0.txt
             apksigner.jar
