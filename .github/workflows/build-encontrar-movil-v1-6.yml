@@ -1,7 +1,7 @@
 name: Build EncontrarMovil v1.8.1 validated bundle
 on:
   push:
-    branches: [build-encontrar-movil-v1-8-1-valid-bundle]
+    branches: [build-encontrar-movil-v1-8-2-helptext]
   workflow_dispatch:
 
 permissions:
@@ -45,6 +45,12 @@ jobs:
 
       - name: Re-show alarm banner after unlock
         run: python scripts/unlock_alarm_banner_v18.py
+
+      - name: Inspect wizard source for help text patch
+        run: |
+          echo "===== MAINACTIVITY BEGIN ====="
+          sed -n '1,520p' android/app/src/main/java/com/findphone/home/MainActivity.java
+          echo "===== MAINACTIVITY END ====="
 
       - name: Upgrade release metadata to v1.8.1 / API 36
         run: |
