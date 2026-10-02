@@ -1,4 +1,4 @@
-name: Build EncontrarMovil v1.6 wizard unsigned
+name: Build EncontrarMovil v1.7 lockscreen alarm unsigned
 on:
   push:
     branches: [build-encontrar-movil-v1-7-lock-alarm]
@@ -40,16 +40,13 @@ jobs:
       - name: Add adaptive setup wizard
         run: python scripts/setup_wizard_v16.py
 
-      - name: Inspect alarm service for v1.7 patch
-        run: |
-          echo "===== FINDPHONESERVICE BEGIN ====="
-          sed -n '1,420p' android/app/src/main/java/com/findphone/home/FindPhoneService.java
-          echo "===== FINDPHONESERVICE END ====="
+      - name: Add lock-screen alarm controls
+        run: python scripts/lockscreen_alarm_v17.py
 
-      - name: Upgrade release metadata to v1.6.0 / API 36
+      - name: Upgrade release metadata to v1.7.0 / API 36
         run: |
-          sed -i "s/versionCode 9/versionCode 10/" android/app/build.gradle
-          sed -i "s/versionName '1.5.2'/versionName '1.6.0'/" android/app/build.gradle
+          sed -i "s/versionCode 9/versionCode 11/" android/app/build.gradle
+          sed -i "s/versionName '1.5.2'/versionName '1.7.0'/" android/app/build.gradle
           sed -i "s/compileSdk 35/compileSdk 36/" android/app/build.gradle
           sed -i "s/targetSdk 35/targetSdk 36/" android/app/build.gradle
           sed -i "s/version '8.8.2'/version '8.9.1'/" android/build.gradle
@@ -65,6 +62,9 @@ jobs:
           grep -q 'Paso ' android/app/src/main/java/com/findphone/home/MainActivity.java
           grep -q 'android.settings.ZEN_MODE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
           grep -q 'android.settings.APP_DATA_USAGE_SETTINGS' android/app/src/main/java/com/findphone/home/MainActivity.java
+          grep -q 'find_phone_alarm_v17' android/app/src/main/java/com/findphone/home/FindPhoneService.java
+          grep -q 'DETENER ALARMA' android/app/src/main/java/com/findphone/home/FindPhoneService.java
+          grep -q 'VISIBILITY_PUBLIC' android/app/src/main/java/com/findphone/home/FindPhoneService.java
 
       - name: Build release APK and AAB
         id: android_build
@@ -87,15 +87,15 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -p -f 4 \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk
+            EncontrarMovil-v1.7.0-lockscreen-unsigned-aligned.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" apksigner.jar
-          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.6.0-unsigned.aab
-          sha256sum EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk EncontrarMovil-v1.6.0-unsigned.aab > SHA256SUMS-v1.6.0.txt
+          cp android/app/build/outputs/bundle/release/app-release.aab EncontrarMovil-v1.7.0-unsigned.aab
+          sha256sum EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk EncontrarMovil-v1.6.0-unsigned.aab > SHA256SUMS-v1.7.0.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: EncontrarMovil-v1.6.0-wizard-unsigned-tools
+          name: EncontrarMovil-v1.7.0-lockscreen-unsigned-tools
           path: |
             EncontrarMovil-v1.6.0-wizard-unsigned-aligned.apk
             EncontrarMovil-v1.6.0-unsigned.aab
